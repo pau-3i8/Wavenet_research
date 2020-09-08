@@ -14,7 +14,7 @@ def generate_data(param, n_Iapps):
 
 ###IMPORT IAPPS FROM A FILE
 def import_data(param):
-    Iapp = Wavenet.read_inputs('input.txt')
+    Iapp = Wavenet.read_inputs('inputs.txt')
     Iapp = [key for key, group in groupby(Iapp) for n_times in range(param['points'])]
     return Iapp
 
@@ -164,20 +164,20 @@ def simulation(param, weights_y, weights_w, weights_z, generate_new):
     return W_predict, Y_predict, Z_predict
 
 ### EXECUTE WAVENET
-param0 = {'a':0.14, 'alfa':-0.01, 'beta':-0.01*2.54, 'eta':0.0, 'c':-0.775, 'd':1, 'kappa':0.1,
-         'h':0.1, 'points':2000, 'n_Iapp':15, 'n_Iapp_new':15, 'I_max':0.1, 'I_min':0.0,
-         'resolution':1, 'n_sf':5, 'fscale':'bicubic', 'bool_lineal':True, 'bool_scale':True,
+param0 = {'a':0.14, 'alfa':-0.01, 'beta':-0.01*2.54, 'eta':0.05, 'c':-0.775, 'd':1, 'kappa':0.01,
+         'h':0.1, 'points':5000, 'n_Iapp':15, 'n_Iapp_new':10, 'I_max':0.1, 'I_min':0.09,
+         'resolution':0, 'n_sf':5, 'fscale':'bicubic', 'bool_lineal':True, 'bool_scale':True,
          'generateIapp':False, 'generateNewIapp':False, 'shuffle':False}
 
 def nagumo():
     param = dict(param0)
-    param['w0'] = -0.03
-    param['y0'] = -0.02
-    param['z0'] = -0.775
+    param['w0'] = -0.1
+    param['y0'] = 0.0
+    param['z0'] = -0.8
     weights_y, weights_w, weights_z = approximation(param, param['generateIapp'])
-    param['w0'] = -0.02
-    param['y0'] = -0.01
-    param['z0'] = -0.77
+    param['w0'] = -0.15
+    param['y0'] = 0.04
+    param['z0'] = -0.8
     if param['w_min']<=param['w0']<=param['w_max'] and param['y_min']<=param['y0']<=param['y_max'] and param['z_min']<=param['z0']<=param['z_max']:
         ###SAVE THE NORMALIZED INPUT
         Wavenet.inputs(param['Iapp'])
@@ -188,7 +188,7 @@ def nagumo():
         ###SAVE THE WEIGHTS IN A FILE
         Wavenet.weights(weights_y, weights_w, weights_z)
         ###SAVE THE OUTPUTS IN A FILE
-        visualitza.save_outputs(W_predict, Y_predict, Z_predict)
+        #visualitza.save_outputs(W_predict, Y_predict, Z_predict)
     else:
         print('ERROR: ICs for the simulation out of the trained range, try other ICs')
 
