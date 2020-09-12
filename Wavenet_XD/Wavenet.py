@@ -107,8 +107,8 @@ def prediction(param, weights, input_data):
     return predicted_data
     
 ### NORMALITZATION
-def normalize(param, target):
-    return (target-param['min'])/(param['max']-param['min'])
+def normalize(param, input_data):
+    return (input_data-param['min'])/(param['max']-param['min'])
 
 ############################################ DOCUMENTOS ###########################################
 
