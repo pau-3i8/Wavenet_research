@@ -1,7 +1,7 @@
 #!/bin/bash
 
 sudo apt-get update && apt-get upgrade -y
-sudo apt-get install python3-pip python3-graphviz -y
+sudo apt-get install python3-pip python3-graphviz python3-h5py -y
 sudo python3 -m pip install 'dask[complete]' #ja instal·la numpy, pandas, psutil i altres
 sudo -H pip3 install fastparquet matplotlib tqdm numba
 sudo apt-get update && apt-get upgrade -y
