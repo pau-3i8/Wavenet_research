@@ -1,8 +1,9 @@
+from numba import njit, float32, float64
 import numpy as np
-from numba import njit
+import dask
 
 ###PHIS
-@njit(nogil = True, fastmath = True, parallel=False)
+@njit(nogil = True, fastmath = True, parallel = False, cache = True)
 def haar(inputs):
     x = np.zeros_like(inputs)
     for i, elem in enumerate(inputs):
@@ -11,10 +12,10 @@ def haar(inputs):
         else:
             x[i] = 0
     return x
-
-@njit(nogil = True, fastmath = True, parallel=False)
+    
+@njit(nogil = True, fastmath = True, parallel = False, cache = True)
 def hat(inputs):
-    x = np.zeros_like(inputs)
+    x = np.zeros_like(inputs, dtype=float32)
     for i, elem in enumerate(inputs):
         if 0 <= elem <= 2:
             if 0 <= elem <= 1:
@@ -24,10 +25,10 @@ def hat(inputs):
         else:
             x[i] = 0
     return x
-
-@njit(nogil = True, fastmath = True, parallel=False)
+    
+@njit(nogil = True, fastmath = True, parallel = False, cache = True)
 def quadratic(inputs):
-    x = np.zeros_like(inputs)
+    x = np.zeros_like(inputs, dtype=float64)
     for i, elem in enumerate(inputs):
         if 0 <= elem <= 3:
             if 0<= elem <= 1:
@@ -39,10 +40,10 @@ def quadratic(inputs):
         else:
             x[i] = 0
     return x
-
-@njit(nogil = True, fastmath = True, parallel=False)
+    
+@njit(nogil = True, fastmath = True, parallel = False, cache = True)
 def bicubic(inputs):
-    x = np.zeros_like(inputs)
+    x = np.zeros_like(inputs, dtype=float64)
     for i, elem in enumerate(inputs):
         if 0 <= elem <= 4:
             if 0 <= elem <= 1:
@@ -67,7 +68,8 @@ def select_phi(name, inputs):
     if name == 'bicubic':
         return bicubic(inputs)
 
-def select_phi_scaled(name, inputs, n):
+#select_phi_scaled
+def phi(name, inputs, n):
     if name == 'haar':
         x = superposition(inputs, n, 1)
         return haar(x)
@@ -80,7 +82,7 @@ def select_phi_scaled(name, inputs, n):
     if name == 'bicubic':
         x = superposition(inputs, n, 4)
         return bicubic(x)
-        
+
 ###PSIS
 def haar_psi(name, inputs):
     return select_phi(name, 2*inputs)-select_phi(name, 2*inputs-1)
@@ -94,7 +96,8 @@ def quadratic_psi(name, inputs):
 def bicubic_psi(name, inputs):
     return 1/8*select_phi(name, 2*inputs)-1/2*select_phi(name, 2*inputs-1)+3/4*select_phi(name, 2*inputs-2)-1/2*select_phi(name, 2*inputs-3)+1/8*select_phi(name, 2*inputs-4)
 
-def select_psi(name, inputs, n):
+#select_psi
+def psi(name, inputs, n):
     if name == 'haar':
         x = superposition(inputs, n, 1)
         return haar_psi(name, x)
@@ -109,6 +112,7 @@ def select_psi(name, inputs, n):
         return bicubic_psi(name, x)
 
 ###DESPLAÇAMENTS
+@njit(nogil = True, fastmath = True, parallel = False, cache = True)
 def superposition(x, n, d):
     if n == 0:
         a = 0
