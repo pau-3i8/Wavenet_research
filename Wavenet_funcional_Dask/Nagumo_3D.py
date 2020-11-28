@@ -13,8 +13,7 @@ import h5py
 #Per monitorar el scheduler: http://localhost:8787
 
 #Cluster local
-client = Client(processes=False, silence_logs='error') #Silence logs pq no apareguin warnings
-#Algun warning salta sempre perque algun worker deixa de rebre instruccions per no saturarse
+client = Client(processes=False, silence_logs='error')
 
 ############################################## EULER ##############################################
 
@@ -69,21 +68,11 @@ def euler(param, Iapp, w0, v0, y0):
 
 ################################### PARAMS & WAVENET PRECONFIG. ###################################
 
-#feq. mínima pel Nagumo 3D = 5000 punts
-#fita_chunk_inf, definirà la dimenció mín del chunk.
-#Un cop executada la WN es pot canviar el numero de punts i el número de Iapps.
-#però el número mínim de Iapps el marcarà la WN.
-
-#no està pensat per treballar amb punts que no siguin valors rodons. A menys que siguin multiples
-#del nº de wavelons. Està pensat per treballar amb moltes Iapps.
-
 param0 = {'a':0.14, 'eps':0.01, 'gamma':2.54, 'alpha':0.02, 'c':-0.775, 'd':1,
           'mu':0.01, 'h':0.1, 'points':5000, 'n_Iapp':None, 'n_Iapp_new':1,
           'I_max':0.1, 'I_min':0.0, 'resolution':0, 'n_sf':5,  'rechunk_factor':2,
           'fscale':'bicubic', 'bool_lineal':True, 'bool_scale':False,
           'generateIapp':True, 'generateNewIapp':True, 'shuffle':False}
-
-#el rechunk_factor (int) serveix per incrementar les files/chunk quan s'import la matriu F(x) i treballar amb més dades de cop per fer les operacions. Millor no tocar a menys que et sobre RAM i Memoria de disc. Si el chunk no és quadrat, essent chunk = (files, cols). Al operar F.T*F els chuncks resultats tenen la mida: chunk = (cols, cols) Per això el rechunk factor només modifica les files i conserva les mides òptimes dels chunks per seguir operant sense afecta la resta d'operacions amb altres matrius.
 
 param0['fita_chunk_inf'] = 130 #[MB]
 param0['fita_chunk_sup'] = 175 #[MB]
@@ -102,7 +91,6 @@ def approximation(param, input_1, input_2, input_3, Iapps, target_data, f_c, n_b
     a = Wavenet.accel(n_blocs, f_c, wavelons)
     n = f_c*a
     n_blocs //= a
-    #a partir del nivell de compressio 6, cada nou nivell aumenta x2 el temps per guardar la matriu
     with h5py.File('matriu.hdf5', 'w') as f:
         dset = f.create_dataset('dataset_matriu', shape = (len(Iapps), wavelons),
                                 chunks = (f_c, f_c), compression = 'gzip', 
@@ -112,8 +100,6 @@ def approximation(param, input_1, input_2, input_3, Iapps, target_data, f_c, n_b
                                                       input_1[n*i:n*(i+1)], input_2[n*i:n*(i+1)],
                                                       input_3[n*i:n*(i+1)], Iapps[n*i:n*(i+1)])
     
-    #FTF necessita algorismes més sofisticats - cal un scheduler per clusters
-    #Els chunks permeten optimitzar l'algoritme i que cap worker s'ofegui.
     with performance_report(): #genera dask-report.html
         f = h5py.File('matriu.hdf5', 'r')
         FX = da.from_array(f.get('dataset_matriu'), chunks=(int(param['rechunk_factor'])*f_c, f_c))
@@ -168,8 +154,6 @@ def normalize(param, train_data, I):
     norm3 = (train_data[2]-param['min_3'])/(param['max_3']-param['min_3'])
     Inorm = (I-param['I_min'])/(param['I_max']-param['I_min'])
     return norm1, norm2, norm3, Inorm
-
-#TODO list: obtenir els limits adients de forma automatica a posprocessed_data
 
 ################################# Funció principal de l'algorisme #################################
 

@@ -14,7 +14,7 @@ def haar(inputs):
     
 @njit(nogil = True, fastmath = True, parallel = False, cache = True)
 def hat(inputs):
-    x = np.zeros_like(inputs, dtype=float32)
+    x = np.zeros_like(inputs)
     for i, elem in enumerate(inputs):
         if 0 <= elem <= 2:
             if 0 <= elem <= 1:

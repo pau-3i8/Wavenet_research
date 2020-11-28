@@ -40,7 +40,7 @@ def matriu_Fx_2D(param, input_1, input_2, Iapp):
         neurones += (2**(3*m)+3*2**(2*m)+3*2**m)
 
     matriu = np.zeros((N, l+(n_sf**3)*neurones)).T
-        
+    
     ## Creas las columnas de la parte lineal
     i = 0
     if param['bool_lineal']:
@@ -66,14 +66,14 @@ def matriu_Fx_2D(param, input_1, input_2, Iapp):
         for elem in list(product(n,n,n)):
             n1, n2, n3 = elem
             for var in v:
-                for c1 in c: #K3
+                for c1 in c: #K1
                     matriu[i] = phi(sf_name, var[0], n1)* phi(sf_name, var[1], n2)* psi(sf_name, (2**m)* var[2] - c1, n3)
                     i+=1
                 for ci in list(product(c,c)): #K2
                     c1, c2 = ci
                     matriu[i] = phi(sf_name, var[0], n1)* psi(sf_name, (2**m)* var[1] - c1, n2)* psi(sf_name, (2**m)* var[2] - c2, n3)
                     i+=1
-            for ci in list(product(c,c,c)): #K1
+            for ci in list(product(c,c,c)): #K3
                 c1, c2, c3 = ci
                 matriu[i] = psi(sf_name, (2**m)* input_1 - c1, n1)* psi(sf_name, (2**m)* input_2 - c2, n2)* psi(sf_name, (2**m)* Iapp - c3, n3)
                 i+=1
@@ -123,21 +123,21 @@ def matriu_Fx_3D(param, input_1, input_2, input_3, Iapp):
         #Les K's corresponen als factors de l'equacio 6.11 del TFG amb els valors de la taula 6.2
         for ns in list(product(n,n,n,n)):
             n1, n2, n3, n4 = ns
-            for var in v1: #K4
+            for var in v1: #K1
                 for c1 in c:
                     matriu[i] = phi(sf_name, var[0], n1)* phi(sf_name, var[1], n2)* phi(sf_name, var[2], n3)* psi(sf_name, (2**m)* var[3] - c1, n4)
                     i+=1
-            for var in v2: #K3
+            for var in v2: #K2
                 for ci in list(product(c,c)):                
                     c1, c2 = ci
                     matriu[i] = phi(sf_name, var[0], n1)* phi(sf_name, var[1], n2)* psi(sf_name, (2**m)* var[2] - c1, n3)* psi(sf_name, (2**m)* var[3] - c2, n4)
                     i+=1
-            for var in v1: #K2
+            for var in v1: #K3
                 for ci in list(product(c,c,c)):
                     c1, c2, c3 = ci
                     matriu[i] = psi(sf_name, (2**m)* var[0] - c1, n1)* psi(sf_name, (2**m)* var[1] - c2, n2)* psi(sf_name, (2**m)* var[2] - c3, n3)* phi(sf_name, var[3], n4)
                     i+=1
-            for ci in list(product(c,c,c,c)): #K1
+            for ci in list(product(c,c,c,c)): #K4
                 c1, c2, c3, c4 = ci
                 matriu[i] = psi(sf_name, (2**m)* input_2 - c1, n1)* psi(sf_name, (2**m)* input_1 - c2, n2)* psi(sf_name, (2**m)* input_3 - c3, n3)* psi(sf_name, (2**m)* Iapp - c4, n4)
                 i+=1
@@ -171,8 +171,6 @@ def read_data(arxiu):
     f.close()
     return data
 
-#TODO list: treballar amb arxius .parquet i oblidar-te dels .txt
-
 ##################################### FUNCIONES DEL ALGORITMO #####################################
 
 ### LOSS
@@ -198,12 +196,10 @@ def training(m, FX, target, mida_chunk, var):
 def MSE(FX, Y, weights):
     FW = dd.from_dask_array(da.dot(FX, weights), columns = ['0']).to_parquet('temp.parquet')    
     FW = np.array(pd.read_parquet('temp.parquet'))
-    #l'arxiu temp és F(x)*w. Només el vull per poder convertir-ho en un array de poca memoria.
     return np.sum((Y - FW)**2)/len(Y)
 
 ################################### Auto WN's parametrization ###################################
 
-# Descomposicio factorial del número de wavelons i parametritzar la matriu en valors multiples
 def descomp_factorial(num):
     factor = 2
     l = []
@@ -224,8 +220,6 @@ def producte(n):
     return p
 
 def divisors(l):
-    #ha de calcular tots els possibles divisors, per tant, farà combinacions de n-1 factor
-    #si fa combinacions dels n factors directament obtenis el valor que havies factoritzat.
     n_factors = np.arange(1, len(l)) #combinacios de 1 a len(l)-1 factors
     ll = []
     for n in n_factors:
@@ -243,8 +237,7 @@ def fita(param, div, cols):
             #les fites estan en dos condicionals diferents pq m'interesa la dimesió del chunk
             #minima que cumpleixi les condicions
             if ((cols/div[i-1])**2)*8/(2**20) <= param['fita_chunk_sup']: #Fita superior.
-                #Es l'optim degut a la durada de les operacions que es fa amb cada chunk.
-                return div[i-1] #retorna la j. chunk_space és fita_inferior
+                return div[i-1]
             else:
                 print("- ERROR - Can't find F(x)'s optimal quadratic minors. Try other wavelon config.", '\n', "A number of wavelons divisible by a number in range [", round(np.sqrt(param['fita_chunk_sup']*2**20/8)), ':', round(np.sqrt(param['fita_chunk_inf']*2**20/8)), "] is needed.")
                 exit()
@@ -273,7 +266,6 @@ def chunk_size(param, cols, punts, multiplier):
     
     n_Iapp = n_Iapps_minim(div, cols, punts, mida_chunk)
     
-    #els blocs tenen tantes files com el chunk, definit per: mida_chunk
     print('') #fico aquest fake salt de linia perque no sem descuadri la taula
     print(display_configuration(j, cols, multiplier, n_Iapp, punts, mida_chunk))
     #multipler es per aumentar més les Iapps si podem
@@ -290,8 +282,6 @@ def chunk_size(param, cols, punts, multiplier):
     return multiplier*n_Iapp*punts//mida_chunk, multiplier*n_Iapp, mida_chunk, punts
         
 import multiprocessing as mp
-#retornarà el divisor més gran pel que es pot dividir n_blocs que permeti la RAM del sistema,
-#per reduir al màx. el nº de loops del for que genera la matriu en el mín. temps possible per core
 def accel(n_blocs, n, wavelons):
     #fico el mp.cpu_count() per tenir-ho preparat per quan vulgui parallelitzar
     div = divisors(descomp_factorial(n_blocs))
@@ -300,8 +290,6 @@ def accel(n_blocs, n, wavelons):
         if (n*elem*wavelons)*8/(2**30) <= psutil.virtual_memory().total/(1024**3)/mp.cpu_count():
     	    return elem
     return 1
-
-#TODO list: parallelitzar la generacio de la matriu. Bottleneck: ssd write speeds. Si s'implementa una queue els seguents processos no s'executaran fins que s'hagi guardat tot al disc dur i no petara res.
 
 ############################################ GRAPHICS ############################################
 
