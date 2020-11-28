@@ -3,6 +3,6 @@
 sudo apt-get update && apt-get upgrade -y
 sudo apt-get install python3-pip python3-graphviz python3-h5py -y
 sudo python3 -m pip install 'dask[complete]' #ja instal·la numpy, pandas, psutil i altres
-sudo -H pip3 install fastparquet matplotlib tqdm numba
+sudo -H pip3 install fastparquet matplotlib tqdm numba==0.51.2 bokeh==2.2.3 terminaltables llvmlite==0.33.0
 sudo apt-get update && apt-get upgrade -y
 sudo apt autoremove -y

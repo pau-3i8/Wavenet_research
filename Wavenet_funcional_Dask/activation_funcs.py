@@ -1,6 +1,5 @@
 from numba import njit, float32, float64
 import numpy as np
-import dask
 
 ###PHIS
 @njit(nogil = True, fastmath = True, parallel = False, cache = True)
