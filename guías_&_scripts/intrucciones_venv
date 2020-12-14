@@ -1,0 +1,17 @@
+#para crear el entorno virtual
+/directorio$ python3 -m venv nombre_entorno
+
+#para acceder al entorno
+/directorio$ source normbre_entorno/bin/activate
+
+#para saber si realmente ejecutamos python desde el entorno
+/directorio$ which python3
+
+#la anteior comanda nos tiene que promptear la dirección del directorio del entorno virtual en el que está intalado pyhton3
+/path/to/nombre_entorno/bin/python3
+
+#para salir del entorno
+$ deactivate
+
+#para borrar el entorno
+$rm -rf nombre_entorno/
