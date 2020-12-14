@@ -1,0 +1,42 @@
+#Guia bàsica de GitHub des de la Terminal CMD/Linux:
+
+#Instal·lació:
+
+#Per Windows cal descarregar-se Git en aquest enllaç: https://gitforwindows.org/. A Linux només cal escriure a la terminal:
+ 
+$ sudo apt-get install git
+
+#Després d’això la resta de línies de codi són iguals en tots dos sistemes operatius. Un cop instal·lat Git a Windows, obre ‘Git CMD’ des de ‘Inicio’ i viatja a la carpeta en la que vulguis treballar amb el repositori fent servir la comanda ‘cd’, per exemple: cd \Escritorio.
+
+#Utilització:
+#Clona el repositori a la teva carpeta:
+
+Desktop$ git clone https://github.com/pau-3i8/Wavenet_research.git
+ 
+#Un cop introduïts el nostre usuari i contrasenya s’haurà creat una carpeta amb el nom del repositori on podrem treballar. Tot el que guardem a aquesta carpeta ho podem penjar directament a GitHub i podem compartir la feina que fem sense haver d’accedir a GitHub, serà com treballar amb una carpeta del propi ordinador amb la llibertat de crear, esborrar i editar els arxius que estiguin a dins de la carpeta, com si fos una més del nostre ordinador.
+
+#Per Saber quines diferencies hi ha entre la carpeta del nostre ordinador i el repositori guardat a GitHub escrivim:
+ 
+Wavenet_research$ git status
+
+#Ara podem enviar la petició dels canvis que fem al repositori:
+
+Wavenet_research$ git add nom_del_arxiu
+ 
+#En comptes d’afegir un únic arxiu, es pot afegir tot el que haguem fet de cop amb la comanda:
+
+Wavenet_research$ git add -A
+ 
+#Un cop registrat el canvi, cal enviar la confirmació de la modificació del directori de treball al HEAD (es una referencia que enllaça les confirmacions dels canvis realitzats al teu directori local amb el repositori) fent:
+ 
+Wavenet_research$ git commit -m “mensaje”
+
+#Es pot no escriure un missatge, però així se sap què és cada cosa. Finalment, només cal sincronitzar els canvis del directori local amb el repositori:
+ 
+Wavenet_research$ git push
+
+#Ara si anem al respositori https://github.com/pau-3i8/Wavenet_research.git, veurem els canvis realitzats.
+
+#Sempre que ens haguem de ficar a treballar al directori local al dia següent, per si algú ha fet un canvi i poder treballar des d’on algú altre ho havia deixat, cal fer:
+ 
+Wavenet_research$ git pull
