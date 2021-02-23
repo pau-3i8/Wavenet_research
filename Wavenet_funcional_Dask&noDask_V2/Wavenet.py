@@ -18,16 +18,17 @@ ratio_comp = {-1:2.5, 0:3, 1:5, 2:13, 3:40}
 ###################################### DIRECTORY MANAGEMENT ######################################
 
 def set_files(param):
-
+    
     if not param['recovery']:
-        path = os.getcwd() #t'agafa la direccio del directori al que estàs
-        path = os.path.join(path, param['matrices_folder']) #path complet del directori /matrices
-        if os.path.exists(path): shutil.rmtree(path) #elimines el directori /matrices per fer espai
-        os.mkdir(path) #crees el directori /matrices de nou
+        main_path = os.getcwd() #t'agafa la direccio del directori al que estàs
+        path = os.path.join(main_path, param['matrices_folder']) #path complet del directori /temporary_dir
+        if os.path.exists(path): shutil.rmtree(path) #elimines el directori /temporary_dir per fer espai
+        os.mkdir(path) #crees el directori /temporary_dir de nou
+        os.mkdir(os.path.join(main_path, param['matrix_folder'])) #path complet del directori /FX
         
     if not (param['only_simulation']  or param['recovery_var'] != 0):
-        path = os.getcwd()
-        path = os.path.join(path, param['results_folder'])
+        main_path = os.getcwd()
+        path = os.path.join(main_path, param['results_folder'])
         if os.path.exists(path): shutil.rmtree(path)
         os.mkdir(path)
 
