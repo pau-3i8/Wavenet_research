@@ -18,7 +18,7 @@ ratio_comp = {-1:2.5, 0:3, 1:5, 2:13, 3:40}
 ###################################### DIRECTORY MANAGEMENT ######################################
 
 def set_files(param):
-    
+
     if not param['recovery']:
         main_path = os.getcwd() #t'agafa la direccio del directori al que estàs
         path = os.path.join(main_path, param['matrices_folder']) #path complet del directori /temporary_dir
@@ -93,7 +93,7 @@ def matriu_2D(param, input_1, input_2, Iapp):
         n = [n for n in range(n_sf)]
         for ns in list(product(n,n,n)):
             n1, n2, n3 = ns
-            matriu[i] = phi(sf_name, input_1, n1, dtype)* phi(sf_name, input_2, n2, dtype)*phi(sf_name, Iapp, n3, dtype)
+            matriu[i] = phi(sf_name, input_1, n1, n_sf, dtype)* phi(sf_name, input_2, n2, n_sf, dtype)*phi(sf_name, Iapp, n3, n_sf, dtype)
             i+=1
 
     ## Creas las columnas de wavelets
@@ -107,15 +107,15 @@ def matriu_2D(param, input_1, input_2, Iapp):
             n1, n2, n3 = elem
             for var in v:
                 for c1 in c: #K3
-                    matriu[i] = phi(sf_name, var[0], n1, dtype)* phi(sf_name, var[1], n2, dtype)* psi(sf_name, (2**m)* var[2] - c1, n3, dtype)
+                    matriu[i] = phi(sf_name, var[0], n1, n_sf, dtype)* phi(sf_name, var[1], n2, n_sf, dtype)* psi(sf_name, (2**m)* var[2] - c1, n3, n_sf, dtype)
                     i+=1
                 for ci in list(product(c,c)): #K2
                     c1, c2 = ci
-                    matriu[i] = phi(sf_name, var[0], n1, dtype)* psi(sf_name, (2**m)* var[1] - c1, n2, dtype)* psi(sf_name, (2**m)* var[2] - c2, n3, dtype)
+                    matriu[i] = phi(sf_name, var[0], n1, n_sf, dtype)* psi(sf_name, (2**m)* var[1] - c1, n2, n_sf, dtype)* psi(sf_name, (2**m)* var[2] - c2, n3, n_sf, dtype)
                     i+=1
             for ci in list(product(c,c,c)): #K1
                 c1, c2, c3 = ci
-                matriu[i] = psi(sf_name, (2**m)* input_1 - c1, n1, dtype)* psi(sf_name, (2**m)* input_2 - c2, n2, dtype)* psi(sf_name, (2**m)* Iapp - c3, n3, dtype)
+                matriu[i] = psi(sf_name, (2**m)* input_1 - c1, n1, n_sf, dtype)* psi(sf_name, (2**m)* input_2 - c2, n2, n_sf, dtype)* psi(sf_name, (2**m)* Iapp - c3, n3, n_sf, dtype)
                 i+=1
                 
     return matriu.T
@@ -144,7 +144,7 @@ def matriu_3D(param, input_1, input_2, input_3, Iapp):
         n = [n for n in range(n_sf)]
         for ns in list(product(n,n,n,n)):
             n1, n2, n3, n4 = ns
-            matriu[i] = phi(sf_name, input_1, n1, dtype)* phi(sf_name, input_2, n2, dtype)* phi(sf_name, input_3, n3, dtype)* phi(sf_name, Iapp, n4, dtype)
+            matriu[i] = phi(sf_name, input_1, n1, n_sf, dtype)* phi(sf_name, input_2, n2, n_sf, dtype)* phi(sf_name, input_3, n3, n_sf, dtype)* phi(sf_name, Iapp, n4, n_sf, dtype)
             i+=1
 
     ## Creas las columnas de wavelets
@@ -159,21 +159,21 @@ def matriu_3D(param, input_1, input_2, input_3, Iapp):
             n1, n2, n3, n4 = ns
             for var in v1: #K4
                 for c1 in c:
-                    matriu[i] = phi(sf_name, var[0], n1, dtype)* phi(sf_name, var[1], n2, dtype)* phi(sf_name, var[2], n3, dtype)* psi(sf_name, (2**m)* var[3] - c1, n4, dtype)
+                    matriu[i] = phi(sf_name, var[0], n1, n_sf, dtype)* phi(sf_name, var[1], n2, n_sf, dtype)* phi(sf_name, var[2], n3, n_sf, dtype)* psi(sf_name, (2**m)* var[3] - c1, n4, n_sf, dtype)
                     i+=1
             for var in v2: #K3
                 for ci in list(product(c,c)):                
                     c1, c2 = ci
-                    matriu[i] = phi(sf_name, var[0], n1, dtype)* phi(sf_name, var[1], n2, dtype)* psi(sf_name, (2**m)* var[2] - c1, n3, dtype)* psi(sf_name, (2**m)* var[3] - c2, n4, dtype)
+                    matriu[i] = phi(sf_name, var[0], n1, n_sf, dtype)* phi(sf_name, var[1], n2, n_sf, dtype)* psi(sf_name, (2**m)* var[2] - c1, n3, n_sf, dtype)* psi(sf_name, (2**m)* var[3] - c2, n4, n_sf, dtype)
                     i+=1
             for var in v1: #K2
                 for ci in list(product(c,c,c)):
                     c1, c2, c3 = ci
-                    matriu[i] = psi(sf_name, (2**m)* var[0] - c1, n1, dtype)* psi(sf_name, (2**m)* var[1] - c2, n2, dtype)* psi(sf_name, (2**m)* var[2] - c3, n3, dtype)* phi(sf_name, var[3], n4, dtype)
+                    matriu[i] = psi(sf_name, (2**m)* var[0] - c1, n1, n_sf, dtype)* psi(sf_name, (2**m)* var[1] - c2, n2, n_sf, dtype)* psi(sf_name, (2**m)* var[2] - c3, n3, n_sf, dtype)* phi(sf_name, var[3], n4, n_sf, dtype)
                     i+=1
             for ci in list(product(c,c,c,c)): #K1
                 c1, c2, c3, c4 = ci
-                matriu[i] = psi(sf_name, (2**m)* input_2 - c1, n1, dtype)* psi(sf_name, (2**m)* input_1 - c2, n2, dtype)* psi(sf_name, (2**m)* input_3 - c3, n3, dtype)* psi(sf_name, (2**m)* Iapp - c4, n4, dtype)
+                matriu[i] = psi(sf_name, (2**m)* input_2 - c1, n1, n_sf, dtype)* psi(sf_name, (2**m)* input_1 - c2, n2, n_sf, dtype)* psi(sf_name, (2**m)* input_3 - c3, n3, n_sf, dtype)* psi(sf_name, (2**m)* Iapp - c4, n4, n_sf, dtype)
                 i+=1
     
     return matriu.T
@@ -372,8 +372,8 @@ def select_algorithm(param, wavelons, marker = 0):
         n_chunks, files_chunk, mode = parametrization(param, wavelons, marker, mode)
     else:
         print('\n','- ERROR - No hay suficiente memoria para la configuración de la Wavenet.')
-        print('Available disk space:', round(psutil.disk_usage('/')[2]/(2**30), 2), 'GB', 'Required disk space:', round(memoria/ratio_comp[param['resolution']], 2), 'GB')
-        pass#exit()
+        print('Available disk space:', round(psutil.disk_usage('/')[2]/(2**30), 2), 'GB', 'Required disk space:', round(memoria/ratio_comp[param['resolution']]*1.1, 2), 'GB')
+        exit()
     return n_chunks, files_chunk, mode
 
 # troba el núm files_chunk més gran (el mín n_chunks) entre les fites donades.
@@ -491,7 +491,7 @@ def compactador(param, n_chunks, files_chunk, wavelons):
         for elem in div:
             if n_chunks/elem < 950: #n_chunks = n_arxius i linux soporta fins 1024 arxius simultanis.
                 if files_chunk*elem*wavelons*param[param['dtype']]/(2**30) <= psutil.virtual_memory().free/(2**30)/(mp.cpu_count()-cpu_compensator)/param['sec_factor']: #max dask chunk [GB]
-                    print('Compressing', n_chunks//elem, 'files at', round(files_chunk*elem*wavelons*param[param['dtype']]/(2**30), 2), 'GB/files')
+                    print('Compressing', n_chunks//elem, 'files at', round(files_chunk*elem*wavelons*param[param['dtype']]/(2**30), 2), 'GB/file')
                     print('Minus', cpu_compensator, 'CPU/s \n')
                     return elem, cpu_compensator
         cpu_compensator += 1
