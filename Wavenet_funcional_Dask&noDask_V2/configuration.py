@@ -84,8 +84,8 @@ param0 = {'dtype':float64,
 		 Wang   -> 'I_max':  3.0, 'I_min':-3.0
 		 MLecar -> 'I_max':100.0, 'I_min':10.0
 - resolution: Corresponde al valor asociado a los niveles de resolución de la red. Toma valores enteros, inferior a 0 si no se quieren usar wavelets. Valor 0 para el primer nivel de wavelets, 1 para el segundo nivel y así sucesivamente.
-- n_sf: corresponde al número de funciones superpuestas. Toma valores 1, 3, 5 y 7. 5 es el que da mejores resultados sin penalizar demasiado el tiempo de cálculo.
-- fscale: Es un string que define el tipo de funcion de escala a usar y a su vez la función de escala con la que se construyen las wavelets. Pueden ser: 'haar' (no recomendado excepto para pruebas teóricas), 'hat', 'quadratic', 'bicubic'.
+- fscale: Es un string que define el tipo de función de escala a usar y a su vez la función de escala con la que se construyen las wavelets. Pueden ser: 'haar' (no recomendado excepto para pruebas teóricas), 'hat', 'quadratic', 'bicubic'.
+- n_sf: corresponde al número de funciones superpuestas. Toma valores enteros de 1 a N. 5 es el que da mejores resultados sin penalizar demasiado el tiempo de cálculo. Aunque 4 con funciones quadráticas (fscale:'quadratic') da muy buenos resultados.
 - bool_lineal: Es un parámetro booleano para definir si se desea utilizar coeficietes lineales (True) o no (False) en la red. (recomiendo usar True, no penaliza nada y mejora las aproximaciones).
 - bool_scale: Es un parámetro booleano para definir si se desea utilizar el primer nivel de sólo funciones de escala (True) o no (False) en la red.
 - generateIapp: Es un parámetro booleano para definir si se desea randomizar las Iapps para la aproximación (True) o no (False). Lógicamente casi siempre estará en True, pero si se desea hacer un benchmark entre dos algoritmos parecidos para ver qué tal aproximan los mismos datos, se puede definir con un False y entonces la red importará los Iapps desde un archivo .parquet. La red randomiza datos a partir de unas semillas (seeds) a lo largo del código, así que se generaran las mismas Iapps con una misma configuración de la red si el parámetro está en True.
