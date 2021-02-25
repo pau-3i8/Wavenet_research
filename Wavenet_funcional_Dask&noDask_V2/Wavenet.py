@@ -611,7 +611,7 @@ def visualize(param, titol, var, Iapps, targets):
         plt.savefig('Phase_portrait_2D.png')
         plt.show()
     # Diagrama de fases 3D
-    phase_portrait(titol, var, outputs, targets)
+    phase_portrait(titol, var, [d_var['pred_'+str(i)] for i in range(len(var))], targets)
 
 def phase_portrait(titol, var, outputs, targets):
     predict_1, predict_2, predict_3 = outputs
