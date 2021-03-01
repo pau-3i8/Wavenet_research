@@ -598,13 +598,14 @@ def visualize(param, titol, var, Iapps, targets):
     # Si el algoritmo fuera != 2D o 3D phase_portarit no funcionaria porque es un grafico 3D
     # tendrian que seleccionar-se las variables a mostrar en cada caso
     if len(var) == 2:
-        outputs  = [d_var['pred_'+str(i)] for i in range(len(var))]+[Iapps]
+        # Para adaptar el daiagrama de fases 3D con el 2D+Iapps
+        d_var['pred_2'] = Iapps
         targets  = targets+(Iapps,)
         var = var+['Iapp']
         # Diagrama de fases 2D
         fig = plt.figure()
         plt.plot(targets[1], targets[0], label='Target', color='blue', linestyle='-', lw = 0.6)
-        plt.plot(outputs[1], outputs[0], label='WNN', color='orange', linestyle='-', lw = 0.5)
+        plt.plot(d_var['pred_1'], d_var['pred_0'], label='WNN', color='orange', linestyle='-', lw = 0.5)
         plt.xlabel(var[0])
         plt.ylabel(var[1])
         plt.legend()
