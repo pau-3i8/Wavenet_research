@@ -60,7 +60,7 @@ def Nagumo_3D(dic, Iapps, w0=0, v0=0, y0=0):
 def WN(euler):
     ## Config
     param, euler_dict = config()
-    var = ['w', 'y', 'v']
+    var = ['w', 'v', 'y']
     titulo_graficos = 'FitzHugh-Nagumo 3D outputs'
     
     ## Find limits to later normalize
