@@ -1,9 +1,9 @@
-import multiprocessing as mp, pandas as pd, numpy as np, psutil, h5py, os, shutil
+import multiprocessing as mp, pandas as pd, numpy as np, psutil, h5py, os, shutil, hdf5plugin
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dask.distributed import performance_report
+from dask.distributed import performance_report, Client
+from activation_functions import matriu_3D, matriu_2D 
 from dask import dataframe as dd, array as da
 from itertools import product, combinations
-from activation_functions import phi, psi
 from scipy.linalg import lstsq as lstsq_
 from dask.distributed import progress
 from numpy.linalg import lstsq
@@ -12,8 +12,8 @@ from numba import njit, types
 from numba.typed import Dict
 from tqdm import tqdm
 
-# Diccionario con los ratios de compresión según el nivel de resolución. Para evitar problemas con la memoria disponible al exprimir la red. Se ha calculado tomando el peor ratio entre compressiones de 6 a 9 a lo largo de los modelos 2D y 3D.
-ratio_comp = {-1:2.5, 0:3, 1:5, 2:13, 3:40}
+# Diccionario con los ratios de compresión según el nivel de resolución. Para evitar problemas con la memoria disponible al exprimir la red. Se ha calculado tomando el peor ratio entre compressiones de 1 a 6 a lo largo de los modelos 2D y 3D.
+ratio_comp = {-1:5, 0:6, 1:10, 2:25, 3:80}
 
 ###################################### DIRECTORY MANAGEMENT ######################################
 
@@ -38,10 +38,11 @@ def set_files(param):
 def matriu_Fx(param, inputs):
     if len(inputs) == 3:
         input_1, input_2, Iapp = inputs
-        return matriu_2D(param, input_1, input_2, Iapp)
+        return matriu_2D(param, input_1, input_2, Iapp, hidden_layer(param, 2))
+    #no hace falta modificar los datos creados en f8 a f4 con .astype('float32') porque ya se modifican al llenar la matriz FX i se hacen a partir de los funciones de activación ya operadas con 16 decimales (f8), permitiendo mejorar el error, a diferencia de si se modificaran los datos aquí antes de operar.
     if len(inputs) == 4:
         input_1, input_2, input_3, Iapp = inputs
-        return matriu_3D(param, input_1, input_2, input_3, Iapp)
+        return matriu_3D(param, input_1, input_2, input_3, Iapp, hidden_layer(param, 3))
 
 # Cálculo de wavelons totales
 def hidden_layer(param, wn_dimension): #wn_dimension = 2 si 2D i 3 si 3D
@@ -68,115 +69,6 @@ def hidden_layer(param, wn_dimension): #wn_dimension = 2 si 2D i 3 si 3D
             print("- ERROR - the WNN's level of resolution and number of superposed functions too high, covariance matrix won't fit in memory. Unable to allocate", round((neuronios**2)*param[param['dtype']]/2**30, 2), 'GB')
             exit()
         return neuronios
-    
-########################### MATRIZ FUNCIONES DE ACTIVACIÓN 3 ENTRADAS ###########################
-
-def matriu_2D(param, input_1, input_2, Iapp):
-    sf_name = param['fscale']
-    n_sf = param['n_sf']
-    dtype = param['dtype']
-    N = len(input_1)
-
-    matriu = np.zeros((N, hidden_layer(param, 2)), dtype = str(dtype)).T
-        
-    ## Creas las columnas de la parte lineal
-    i = 0
-    if param['bool_lineal']:
-        i = 2
-        #el type de variable de numba es sin string
-        #numpy sólo acepta type en formato string
-        matriu[0] = np.ones((1, N), dtype = str(dtype))*input_1
-        matriu[1] = np.ones((1, N), dtype = str(dtype))*input_2
-    
-    ## Creas las columnas de funciones de escala
-    if param['bool_scale']:
-        n = [n for n in range(n_sf)]
-        for ns in list(product(n,n,n)):
-            n1, n2, n3 = ns
-            matriu[i] = phi(sf_name, input_1, n1, n_sf, dtype)* phi(sf_name, input_2, n2, n_sf, dtype)*phi(sf_name, Iapp, n3, n_sf, dtype)
-            i+=1
-
-    ## Creas las columnas de wavelets
-    for m in range(param['resolution']+1):
-        n = [n for n in range(n_sf)]
-        c = [c for c in range(2**m)]
-        v = [(input_1, input_2, Iapp), (Iapp, input_1, input_2), (input_2, Iapp, input_1)]
-
-        #Les K's corresponen als factors de l'equacio 6.11 del TFG amb els valors de la taula 6.2
-        for elem in list(product(n,n,n)):
-            n1, n2, n3 = elem
-            for var in v:
-                for c1 in c: #K3
-                    matriu[i] = phi(sf_name, var[0], n1, n_sf, dtype)* phi(sf_name, var[1], n2, n_sf, dtype)* psi(sf_name, (2**m)* var[2] - c1, n3, n_sf, dtype)
-                    i+=1
-                for ci in list(product(c,c)): #K2
-                    c1, c2 = ci
-                    matriu[i] = phi(sf_name, var[0], n1, n_sf, dtype)* psi(sf_name, (2**m)* var[1] - c1, n2, n_sf, dtype)* psi(sf_name, (2**m)* var[2] - c2, n3, n_sf, dtype)
-                    i+=1
-            for ci in list(product(c,c,c)): #K1
-                c1, c2, c3 = ci
-                matriu[i] = psi(sf_name, (2**m)* input_1 - c1, n1, n_sf, dtype)* psi(sf_name, (2**m)* input_2 - c2, n2, n_sf, dtype)* psi(sf_name, (2**m)* Iapp - c3, n3, n_sf, dtype)
-                i+=1
-                
-    return matriu.T
-
-
-########################### MATRIZ FUNCIONES DE ACTIVACIÓN 4 ENTRADAS ###########################
-
-def matriu_3D(param, input_1, input_2, input_3, Iapp):
-    sf_name = param['fscale']
-    n_sf = param['n_sf']
-    dtype = param['dtype']
-    N = len(input_1)
-    
-    matriu = np.zeros((N, hidden_layer(param, 3)), dtype = str(dtype)).T   
-
-    ## Creas las columnas de la parte lineal
-    i = 0
-    if param['bool_lineal']:
-        i = 3
-        matriu[0] = np.ones((1, N), dtype = str(dtype))*input_1
-        matriu[1] = np.ones((1, N), dtype = str(dtype))*input_2
-        matriu[2] = np.ones((1, N), dtype = str(dtype))*input_3
-        
-    ## Creas las columnas de funciones de escala
-    if param['bool_scale']:
-        n = [n for n in range(n_sf)]
-        for ns in list(product(n,n,n,n)):
-            n1, n2, n3, n4 = ns
-            matriu[i] = phi(sf_name, input_1, n1, n_sf, dtype)* phi(sf_name, input_2, n2, n_sf, dtype)* phi(sf_name, input_3, n3, n_sf, dtype)* phi(sf_name, Iapp, n4, n_sf, dtype)
-            i+=1
-
-    ## Creas las columnas de wavelets
-    for m in range(param['resolution']+1):
-        n = [n for n in range(n_sf)]
-        c = [c for c in range(2**m)]
-        v1 = [(input_2, input_1, input_3, Iapp), (Iapp, input_2, input_1, input_3), (input_3, Iapp, input_2, input_1), (input_1, input_3, Iapp, input_2)]
-        v2 = [(input_2, input_1, input_3, Iapp), (Iapp, input_2, input_1, input_3), (input_3, Iapp, input_2, input_1), (input_1, input_3, Iapp, input_2), (input_3, input_2, input_1, Iapp), (input_1, Iapp, input_3, input_2)]
-
-        #Les K's corresponen als factors de l'equacio 6.11 del TFG amb els valors de la taula 6.2
-        for ns in list(product(n,n,n,n)):
-            n1, n2, n3, n4 = ns
-            for var in v1: #K4
-                for c1 in c:
-                    matriu[i] = phi(sf_name, var[0], n1, n_sf, dtype)* phi(sf_name, var[1], n2, n_sf, dtype)* phi(sf_name, var[2], n3, n_sf, dtype)* psi(sf_name, (2**m)* var[3] - c1, n4, n_sf, dtype)
-                    i+=1
-            for var in v2: #K3
-                for ci in list(product(c,c)):                
-                    c1, c2 = ci
-                    matriu[i] = phi(sf_name, var[0], n1, n_sf, dtype)* phi(sf_name, var[1], n2, n_sf, dtype)* psi(sf_name, (2**m)* var[2] - c1, n3, n_sf, dtype)* psi(sf_name, (2**m)* var[3] - c2, n4, n_sf, dtype)
-                    i+=1
-            for var in v1: #K2
-                for ci in list(product(c,c,c)):
-                    c1, c2, c3 = ci
-                    matriu[i] = psi(sf_name, (2**m)* var[0] - c1, n1, n_sf, dtype)* psi(sf_name, (2**m)* var[1] - c2, n2, n_sf, dtype)* psi(sf_name, (2**m)* var[2] - c3, n3, n_sf, dtype)* phi(sf_name, var[3], n4, n_sf, dtype)
-                    i+=1
-            for ci in list(product(c,c,c,c)): #K1
-                c1, c2, c3, c4 = ci
-                matriu[i] = psi(sf_name, (2**m)* input_2 - c1, n1, n_sf, dtype)* psi(sf_name, (2**m)* input_1 - c2, n2, n_sf, dtype)* psi(sf_name, (2**m)* input_3 - c3, n3, n_sf, dtype)* psi(sf_name, (2**m)* Iapp - c4, n4, n_sf, dtype)
-                i+=1
-    
-    return matriu.T
 
 ################################## FUNCIONES PARA GENERAR DATOS ##################################
     
@@ -221,6 +113,7 @@ def in_memory_approx(param, var, Iapps, tuples):
 def in_memory_training(param, Fx, target, var):
     ## Fastest
     weights = np.array([solve(Fx, target, alpha=param['regularizer'])]).T #vector columna
+    #el targuet será siempre f8, pero FX puede ser de tipo f4, eso permite obtener un vector de pesos que siempre será f8, algo bueno. Teniendo en cuenta que la única razón de definir FX como f4 es para ahorrar espacio y generar más datos. Lo mismo pasará con el caso out-of-core.
     """
     FTF = np.dot(Fx.T, Fx)
     vaps = eigh(FTF, eigvals_only=True)
@@ -236,9 +129,12 @@ def in_memory_training(param, Fx, target, var):
 
 ### APPROXIMATION
 # tuples = [(input_1, target_1), (input_2, target_2) [...]] funció genèrica
-def bloc_write(i, nf, factor, files_chunk, wavelons, param, Iapps, tuples):
+def write_file(i, nf, factor, files_chunk, wavelons, param, Iapps, tuples):
+    #CUIDAO AQUÍ!, SI HAY ERRORES DE CÓDIGO DENTRO DE UNA FUNCIÓN LLAMADA DES DE EL PROCESSPOOLEXECUTOR, NO APARECERÁ NINGÚN AVISO A LA TERMINAL Y SIMPLEMENTE EL CÓDIGO SEGUIRÁ EJECUTÁNDOSE.
     with h5py.File(param['matrix_folder']+'/matriu'+'0'*(4-len(str(i)))+str(i)+'.hdf5', 'w') as f:
-        dset = f.create_dataset('dset', shape = (nf, wavelons), chunks = (nf, wavelons), compression = 'gzip', compression_opts = param['compression'], dtype = str(param['dtype']))
+        dset = f.create_dataset('dset', shape = (nf, wavelons), chunks = (nf, wavelons),
+                                **hdf5plugin.Blosc(cname='zstd', clevel=param['compression']))
+        #no cal definir el dtype, tindrà el que tingui l'array amb el que es genera l'arxius
         for j in range(factor):
             inputs = [input_[0][nf*i:nf*(i+1)][files_chunk*j:files_chunk*(j+1)] for input_ in tuples]+[Iapps[nf*i:nf*(i+1)][files_chunk*j:files_chunk*(j+1)]]
             dset[files_chunk*j:files_chunk*(j+1)] = matriu_Fx(param, inputs)
@@ -251,8 +147,20 @@ def out_of_core_approx(param, var, Iapps, tuples, files_chunk, n_chunks, wavelon
     
     if not param['recovery']:
         with ProcessPoolExecutor(mp.cpu_count()-cpu_compensator) as ex:
-            futures = [ex.submit(bloc_write, i, nf, factor, files_chunk, wavelons, param, Iapps, tuples) for i in range(n_chunks)]
+            futures = [ex.submit(write_file, i, nf, factor, files_chunk, wavelons, param, Iapps, tuples) for i in range(n_chunks)]
             [_ for _ in tqdm(as_completed(futures), total=len(futures), desc='Guardant matriu creada', unit='arxiu', leave=True)]
+    
+    ############# DISTRIBUTED CLIENT CONFIGURATION #############
+    #Cluster local || Per monitorar el scheduler: http://localhost:8787
+    client = Client(processes=False,
+                silence_logs='error',
+                local_dir=param['client_temp_data'],
+                n_workers=1,
+                threads_per_worker=1,
+                dashboard_address='localhost:8787')
+    """Silence_logs pq no apareguin warnings: perque algun worker deixa de
+rebre instruccions per no saturarse"""
+    print(client)    
     
     arxius_oberts=[]
     with performance_report(): #genera dask-report.html
@@ -267,13 +175,15 @@ def out_of_core_approx(param, var, Iapps, tuples, files_chunk, n_chunks, wavelon
             print('Guardant matriu de covariancia FTF')
             if not param['recovery_FTF']:
                 FTF = dd.from_dask_array(da.dot(FX.T, FX), columns = [str(elem) for elem in np.arange(wavelons)])
-                FTF = FTF.persist() #he d'executar els calculs al background per veure el progres
-                progress(FTF) #per veure la barra de progress amb distributed.
+                FTF = FTF.persist() #permite cargar tareas en segundo plano, para cálculos pesado mejora el rendimiento.
+                progress(FTF) #para ver la barra de progreso en distributed
                 FTF.to_parquet(param['matrices_folder']+'/FTF.parquet')
             for i in range(param['recovery_var'],len(tuples)):
+                client.restart() #para borrar tareas que se hayas quedado en caché.
                 print('\n'+'--- Aproximando', var[i], '---')
                 target = tuples[i][1].reshape(len(tuples[i][1]), 1)
                 out_of_core_training(param, FX, target, files_chunk, var[i])
+            
         finally:
             #el finally tanca tots els arxius oberts encara que apareguin errors.
             [arxiu.close() for arxiu in arxius_oberts]
@@ -320,7 +230,7 @@ def simulation(param, var, Iapps, tuples): #introdueixo una funcio func com a ar
         d_var['i_'+str(i)] = np.array([elem[0]])
         d_var['predicted_'+str(i)] = np.zeros_like(elem[1])
 
-    for j,I in enumerate(tqdm(Iapps, desc='Predicció', unit=' integracions', leave=False)):
+    for j,I in enumerate(tqdm(Iapps, desc='Predicció', unit=' integracions', leave=True)):
         normalized = normalize(param, (d_var['i_'+str(i)] for i in range(len(tuples))), np.array([I]))
         Fx = matriu_Fx(param, normalized)
         for i in range(len(tuples)):
@@ -328,7 +238,7 @@ def simulation(param, var, Iapps, tuples): #introdueixo una funcio func com a ar
             d_var['predicted_'+str(i)][j] = d_var['i_'+str(i)] #guardo la prediccio
             
     for i in range(len(tuples)): #resultats
-        print('->', var[i],'RMSE:', np.sum((d_var['t_'+str(i)]-d_var['predicted_'+str(i)])**2)/np.sum((np.mean(d_var['t_'+str(i)])-d_var['t_'+str(i)])**2)*100,'%')
+        print('->', var[i],'RMSE:', np.sum((d_var['t_'+str(i)][param['rmse_eval']:]-d_var['predicted_'+str(i)][param['rmse_eval']:])**2)/np.sum((np.mean(d_var['t_'+str(i)][param['rmse_eval']:])-d_var['t_'+str(i)][param['rmse_eval']:])**2)*100,'%')
         save_data(param['results_folder']+'/predicted_' + var[i] + '.parquet', da.from_array(d_var['predicted_'+str(i)]))
 
 def domain_limits(param, euler_dict, func, **cond_ini_approx):
@@ -545,15 +455,20 @@ def prediction(param, euler_dict, euler, var, titulo, **CI_simu):
 
     euler_dict['points'] = param['points_simu']
     _, target = euler(dic(euler_dict), Iapps, **CI_simu)
+    #guardo los targets generados
+    [save_data('prova/target_' + var[i] + '.parquet', da.from_array(target[i])) for i in range(len(target))]
+    
     Iapps = np.array([I for I in Iapps for n_times in range(param['points_simu'])])
     #aquí també el vector Iapps ha de ser tan gran com el total d'integracions per Iapp
     tuples = [(CI, target[i]) for i,CI in enumerate(CI_simu.values())]
     #CI_simu és un diccionari les CI són els valors de cada key
+    
     simulation(param, var, Iapps, tuples)
+    
     #si solo se quieren ver los graficos, los outputs ya deberían estar guardados y solo necesitas generar los targets con la funcion euler()
     
     ## Gràfics
-    visualize(param, titulo, var, Iapps, target)
+    #visualize(param, titulo, var, Iapps, target)
 
 ############################################ GRAPHICS ############################################
 
@@ -598,7 +513,6 @@ def visualize(param, titol, var, Iapps, targets):
     # Si el algoritmo fuera != 2D o 3D phase_portarit no funcionaria porque es un grafico 3D
     # tendrian que seleccionar-se las variables a mostrar en cada caso
     if len(var) == 2:
-        # Para adaptar el daiagrama de fases 3D con el 2D+Iapps
         d_var['pred_2'] = Iapps
         targets  = targets+(Iapps,)
         var = var+['Iapp']
@@ -639,8 +553,8 @@ def time_graphic(titol, var, Iapps, predicted_data, target):
     plt.title(titol)
     plt.xlabel('Steps')
     plt.ylabel(var)
-    plt.plot(time, target, label='Target', color='blue', linestyle='-')
-    plt.plot(time, predicted_data, label='WNN', color='orange', linestyle='-')
+    plt.plot(time, target, label='Target', color='blue', linestyle='-', lw = 0.6)
+    plt.plot(time, predicted_data, label='WNN', color='orange', linestyle='-', lw = 0.6)
     plt.legend()
 
     plt.subplot(212)
