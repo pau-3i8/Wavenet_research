@@ -69,7 +69,7 @@ def WN(euler):
     ## Definir las cond_iniciales de la approx y la simu en cada funcion (pueden ser CI distintas)
     if not param['only_simulation']:
         Wavenet.approximation(param, euler_dict, euler, var, w0=-0.1, v0=0.0, y0=-1.0)
-    Wavenet.prediction(param, euler_dict, euler, var, titulo_graficos, w0=-0.1, v0=0.0, y0=-1.0)
+    Wavenet.prediction(param, euler_dict, euler, var, titulo_graficos, w0=-0.11, v0=0.11, y0=-2.0)
 
 if __name__ == "__main__":
     from timeit import Timer

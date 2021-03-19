@@ -1,21 +1,6 @@
 from numba.typed import Dict
 from numba import types
-import os, dask
 import Wavenet
-
-################################### DISTRIBUTED ENV. VARIABLES ###################################
-
-# Variables de entorno de dask.distributed
-os.environ['DASK_DISTRIBUTED__WORKER__MEMORY__TARGET'] = 'False'
-os.environ['DASK_DISTRIBUTED__WORKER__MEMORY__SPILL'] = 'False'
-os.environ['DASK_DISTRIBUTED__WORKER__MEMORY__PAUSE'] = '0.93'
-os.environ['DASK_DISTRIBUTED__WORKER__MEMORY__TERMINATE'] = '0.95'
-os.environ['DASK_DISTRIBUTED__SCHEDULER__ALLOWED_FAILURES'] = '10'
-os.environ['DASK_DISTRIBUTED__COMM__TIMEOUTS__CONNECT'] = '5'
-os.environ['DASK_DISTRIBUTED__COMM__RETRY__COUNT'] = '10'
-
-# Variable de entorno para numpy
-#os.environ['OMP_NUM_THREADS']='1' #limita el número de threads de numpy
 
 ###################################### WAVENET CONFIGURATION ######################################
 
@@ -27,18 +12,17 @@ param0 = {'dtype':'float64',
           'float32':4,
           
           'domain_margin':2.5,
-          'sec_factor':1.5,
           'regularizer':1e-30,
-          
+                    
           'points':5000,
-          'n_Iapp':2900,
+          'n_Iapp':120,
           
           'points_simu':5000,
-          'n_Iapp_simu':50,
-          'rmse_eval':0,
+          'n_Iapp_simu':10,
+          'rmse_eval':5000,
           
           'I_max':0.1,
-          'I_min':0,
+          'I_min':0.0,
           
           'resolution':0,
           'n_sf':4,
@@ -51,10 +35,9 @@ param0 = {'dtype':'float64',
           'generateIapp_simu':True,
           'shuffle':False,
           
-          'fita_chunk_inf':130,
-          'fita_chunk_sup':140,
-          
-          'compression':6,
+          # Recomendación a f8: [250, 300] a f4: [60, 70]
+          'fita_chunk_inf':250,
+          'fita_chunk_sup':300,
                
           'recovery':False,
           'recovery_FTF':False,
@@ -62,10 +45,20 @@ param0 = {'dtype':'float64',
           
           'matrix_folder':'temporary_dir/FX',
           'matrices_folder':'temporary_dir',
-          'client_temp_data':'temporary_dir',
           'results_folder':'resultados',
           
           'only_simulation':False,
+          
+          # Compression
+          'cname': 'zstd',
+          'clevel': 1,
+          
+          ## Distributed params config ##
+          'n_workers': 4,
+          'threads_per_worker': 1,
+          'memory_limit': '2G',
+          'processes': True,
+          'client_temp_data':'temporary_dir',
 }
 
 # Guía de parámetros.
@@ -75,7 +68,6 @@ param0 = {'dtype':'float64',
 - float64: define el número de bytes que ocupa el tipo de variable float64. - No tocar -
 - float32: define el número de bytes que ocupa el tipo de variable float32. - No tocar -
 - domain_margin: Toma valor 2.5 definido en un tanto por 1 del aumento del dominio, respecto a la I_max, para dar margen al dominio de Iapps en el que se aproxima la red para poder obtener extremos más mayores en el dominio de cada variable y hacer una normalización sin problemas. Si el espacio vectorial da problemas a 2.5 del dominio de Iapps se puede bajar un poco, pero para los modelos probados no han habido problemas hasta ahora.
-- sec_factor: Es un factor de seguridad, necesario debido al comportamiento del software, que evita problemas al asignar el tamaño de los archivos, en los que se divide la matriz FX, a cada hilo del procesador para genenrarla en paralelo. Ya que cada archivo se tiene que cargar primero a la memoria para poder guardarlo luego. Toma valores de tipo float. Si se cambia el tamaño del chunk con las fitas, es probable que haya que modificar el factor de seguridad. A mayor chunk, mayor el factor de seguridad. Lo ideal seria controlar los recursos mientras se genera la primer atanda de archivos para comprobar que no se está ahogando la RAM. Se puede controlar en la shell con el comando: 'htop -d 0.9' (-d 0.9 sirve para refrescar los datos cada 0.9 segundos, para ver los cambios con mayor fluidez).
 - regularizer: Define el parámetro de regularización para evitar problemas de inversa y suavizar la superficie de curvatura del modelo. A 1e-30 le añade un valor derivado de la imprecision computacional suficiente para el uso que tiene. Para saber hasta que decimal de precision se puede llegar con cada tipo de variable se puede ejecutar en python3: >>> numpy.finfo(tipo_de_la_variable).eps .Si se trabaja con 'float32' la máxima precisión és de 1.1920929e-07 y 1e-30 sólo añade el mismo número que qualquier valor por debajo de 1.1920929e-07.
 - points: (valor enteror) Corresponde al número de integraciones por Iapp en el euler para la approximación. Sugiero utilizar el mínimo necesario para que la dinámica dle sitema llegue a los puntos fijos y poder exprimir con el  número de Iapps. También hay que tener en cuenta el paso de integración por eso, definido en euler_dict0['h']. Si se quiere usar un número muy grande de integraciones des de la configuración, és possible que la mágina se quede sin memoria si se mate la ejecución del programa, porque primero se calculan los límites de los dominios de cada variable para normalizar en el post procesado y en ese cálculo se cogen en numero de puntos definidos en la configuración junto con 10.000 Iapps randomizadas. Recomiendo empezar con un numero de puntos suficiente para definir los puntos fijos del sistema y luego cambiar el numero de puntos en la terminal durante la ejecución.
 - n_Iapp: (valor enteror) Corresponde al número de Iapps usadas para la aproximación.
@@ -98,19 +90,25 @@ param0 = {'dtype':'float64',
 - fita_chunk_inf: Define los MB mínimos del chuhnk de la matriz FX. - No tocar si no se sabe lo que se hace -
 - fita_chunk_sup: Define los MB máximos del chuhnk de la matriz FX. - No tocar si no se sabe lo que se hace -
 Con las dos fitas inferiores se puede definir un rango aceptable de dimensiones de chunks que pueden ser buenos para nuestra máquina en particular. EL tamaño de los chunks es muy important para que puedan realizarse los cálculos en Dask sin problemas de moemoria. El tamanyo óptimo de los chunks depende del número tareas a ejecutar, la cantidad de memoria RAM, la cantidad de hilos del procesador usados en el cliente de dask.distributed y el tipo de cálculos. Los valores predefinidos son suficientes.
-- compression: Define el nivel (índice) de compresion del algoritmo zstd de los archivos hdf5 para la generación de la matriz de funciones de activación Fx. Los valores de compresión van del 1 al 9 en valores enteros. Al generar la matriz en paralelo poner el índice a 6 no penaliza demasiado y tiene un muy buen ratio de compresión. El índice 1 o 2 puede ser una buena elección para discos duros lentos. Se ha mejorado mucho respecto a la anterior compresión usada. La utilización de la RAM con este algoritmo de ocmpresió és muy reducida, así que se puede empezar a definir el sec_factor a 1 y subir poco a poco si hace falta a 1.1, 1.15...
 - recovery: A veces pueden haber problemas a lo largo de la simulación, si se hace out-of-core pueden tardar muchas horas si se es ambicioseo. A lo largo de estas horas uno no sabe l oque puede pasar, personalmente empujo el ordenador un poco al límite para sacarle potencia y eso genera inestabilidades, he tenido que reiniciar el algoritmo multiples veces luego de apagones repentinos. Los parámetros recovery evitaran que estas inestabilidades sean un menor dolor de cabeza. Si se ha guardado la matriz FX, no la volvera a generar con True y al ejecutar la red directamente importará la matriz para empezar a calcular la de covariancia FTF. Si no hay nada que recuperar y se ejecuta la red con normalidad tiene que ser False.
 - recovery_FTF: Igual que con el caso anterior, si se ha llegado a guardar la a matriz FTF, no la volvera a generar con True y al ejecutar la red directamente importará la matriz para empezar a calcular los pesos. Si no hay nada que recuperar y se ejecuta la red con normalidad tiene que ser False.
 - recovery_var: Si se estan ejecutando los pesos y se llega a guardar alguno de ellos este parámetro permite empezar a calcular el peso siguiente donde se había dejado todo. El parámetro toma valores enteros del 0 al número de variables de estado del modelo. 0 para calcular todos los pesos  apartir del primero (como si fuera una ejecución con normalidad), 1 para calcular todos los pesos a partir de la segunda variable de estado, 2 para calcular todos los pesos a partir de la tercera variable de estado, y así sucesivamente.
 - matrices_folder: Define el directorio (en formato string) donde se guardan las matrices FTF y el resto de matrices temporales. Se creará un directorio en la carpeta en la que se ejecute el código de la red.
 - matrix_folder: Define el directorio (en formato string) donde se guarda la matriz FX Se creará un directorio en la carpeta en la que se ejecute el código de la red. OBLIGATORIO que sea un subdirectorio del definido en 'matrices_folder' tal y como esta puesto en default.
-- client_temp_data: Define el directorio (en formato string) donde se guardan los datos temporales del cliente del cluster de distributed.
 - results_folder: Define el directorio (en formato string) donde se guardan los vectores de los pesos y los outputs d ela predicción. Se creará un directorio en la carpeta en la que se ejecute el código de la red.
 - only_simulation: Es un parámetro booleano para definir si se desea ejecutar sólo la simulación (True) o no (False) de la red. És útil para, una vez encontrados los pesos, estudiar rangos de Iapps más detalladamente con distintas simulaciones sin perder tiempo.
-"""
+- cname: Define el tipo de compresor que se usa, puede tomar cualquier string de los de la lista: ['blosclz', 'lz4', 'lz4hc', 'snappy', 'zlib', 'zstd']
+- clevel: Define el nivel (índice) de compresion del algoritmo cname usado. Los valores de compresión van del 1 al 9 en valores enteros. 
 
-## Setup files first, the distributed local_dir path is in a WN configured folder
-Wavenet.set_files(param0)
+El algoritmo de ocmpressió y el nivel depende del espacio y tiempo que quiera sacrificar cada uno, pero el Zstandard con un índice a 1 no penaliza demasiado y tiene un muy buen ratio de compresión. El índice 1 o 2 puede ser una buena elección para discos duros lentos. Se ha mejorado mucho respecto a la anterior compresión usada. La utilización de la RAM con este algoritmo de compresió és muy reducida.
+
+AQUÍ ESTAN LOS PARÁMETROS PARA CONFIGURAR EL CLIENTE DE DISTRIBUTED.
+- n_workers: Se especifica el número de processadores assignados al scheduler de dask.distributed. Tiene qu eser un númeor par o 1.
+- threads_per_worker: Se especifica el número de hilos asignados a cada procesador.
+- memory_limit: Define el la cantidad de RAM assignada a cada procesador, que luego se divide en cada hilo asignado de dicho procesador. Se reacomienda que sea un string que especifíca el número de GB, por ejemplo '2G'. Tener en cuenta la cantidad de RAM del sistema, si se especifica más RAM de la que tiene un ordenador, dask intentará usarla y petará todo porque no existirá dicha cantidad.
+- processes: Especifica el tipo de scheduler a usar en distributed. Si és False, se usara un scheduler single-thread y todos los cálculos se harán en un sólo procesador. Si es True, se usará un scheduler con multiprocessin para distribuir la carga entre el número de procesadores específicados.
+- client_temp_data: Define el directorio (en formato string) donde se guardan los datos temporales del cliente del cluster de distributed.
+"""
 
 ################################## EULER'S PARAMETER DICCIONARY ##################################
 
@@ -153,4 +151,6 @@ euler_dict0['noise'] = 0.08 #ruido del 8% (con una distribución uniforme varia 
 ##################################################################################################
 
 def config():
+    ## Setup files first, the distributed local_dir path is in a WN configured folder
+    Wavenet.set_files(param0)
     return param0, euler_dict0

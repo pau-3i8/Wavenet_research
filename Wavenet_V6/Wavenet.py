@@ -1,19 +1,18 @@
-import multiprocessing as mp, pandas as pd, numpy as np, psutil, h5py, os, shutil, hdf5plugin
-from concurrent.futures import ProcessPoolExecutor, as_completed
-from dask.distributed import performance_report, Client
+from dask.distributed import performance_report, Client, LocalCluster
+import pandas as pd, numpy as np, psutil, os, shutil, zarr, dask
 from activation_functions import matriu_3D, matriu_2D 
 from dask import dataframe as dd, array as da
 from itertools import product, combinations
-from scipy.linalg import lstsq as lstsq_
 from dask.distributed import progress
 from numpy.linalg import lstsq
 from scipy.linalg import eigh
 from numba import njit, types
 from numba.typed import Dict
+from numcodecs import Blosc
 from tqdm import tqdm
 
 # Diccionario con los ratios de compresión según el nivel de resolución. Para evitar problemas con la memoria disponible al exprimir la red. Se ha calculado tomando el peor ratio entre compressiones de 1 a 6 a lo largo de los modelos 2D y 3D.
-ratio_comp = {-1:5, 0:6, 1:10, 2:25, 3:80}
+ratio_comp = {-1:3, 0:3, 1:6, 2:15, 3:30}
 
 ###################################### DIRECTORY MANAGEMENT ######################################
 
@@ -96,98 +95,64 @@ def read_data(arxiu):
     #retorn np.array([n elem])
     return np.array(pd.read_parquet(arxiu)).T[0]
 
-####################################### IN MEMORY ALGORITHM #######################################
-from hyperlearn.solvers import solve
-
-### APPROXIMATION
-def in_memory_approx(param, var, Iapps, tuples):
-    inputs = tuple([input_[0] for input_ in tuples])+(Iapps,)
-    Fx=  matriu_Fx(param, inputs)
-    print('')
-    for i in range(len(tuples)):
-        print('--- Aproximando', var[i], '---')
-        target = tuples[i][1].reshape(len(tuples[i][1]), 1) #ajusta la dimensió pel training
-        save_data(param['results_folder']+'/weights_' + var[i] + '.parquet', in_memory_training(param, Fx, target, var[i]))
-            
-### LOSS
-def in_memory_training(param, Fx, target, var):
-    ## Fastest
-    weights = np.array([solve(Fx, target, alpha=param['regularizer'])]).T #vector columna
-    #el targuet será siempre f8, pero FX puede ser de tipo f4, eso permite obtener un vector de pesos que siempre será f8, algo bueno. Teniendo en cuenta que la única razón de definir FX como f4 es para ahorrar espacio y generar más datos. Lo mismo pasará con el caso out-of-core.
-    """
-    FTF = np.dot(Fx.T, Fx)
-    vaps = eigh(FTF, eigvals_only=True)
-    A = FTF + np.identity(FTF.shape[0])*param['regularizer']*vaps[-1].real
-    b = np.dot(Fx.T, target)
-    weights = lstsq(A, b, rcond=None)[0].T
-    """
-    ## Compute approximation error
-    print('->', var, 'MSE at level =', param['resolution'] + 2, 'is:', np.sum((target-Fx.dot(weights))**2)/len(target))
-    return da.from_array(weights) #paso a dask.arrya para guardarlo con save_data()
-
 ###################################### OUT-OF-CORE ALGORITHM ######################################
 
 ### APPROXIMATION
 # tuples = [(input_1, target_1), (input_2, target_2) [...]] funció genèrica
-def write_file(i, nf, factor, files_chunk, wavelons, param, Iapps, tuples):
-    #CUIDAO AQUÍ!, SI HAY ERRORES DE CÓDIGO DENTRO DE UNA FUNCIÓN LLAMADA DES DE EL PROCESSPOOLEXECUTOR, NO APARECERÁ NINGÚN AVISO A LA TERMINAL Y SIMPLEMENTE EL CÓDIGO SEGUIRÁ EJECUTÁNDOSE.
-    with h5py.File(param['matrix_folder']+'/matriu'+'0'*(4-len(str(i)))+str(i)+'.hdf5', 'w') as f:
-        dset = f.create_dataset('dset', shape = (nf, wavelons), chunks = (nf, wavelons),
-                                **hdf5plugin.Blosc(cname='zstd', clevel=param['compression']))
-        #no cal definir el dtype, tindrà el que tingui l'array amb el que es genera l'arxius
-        for j in range(factor):
-            inputs = [input_[0][nf*i:nf*(i+1)][files_chunk*j:files_chunk*(j+1)] for input_ in tuples]+[Iapps[nf*i:nf*(i+1)][files_chunk*j:files_chunk*(j+1)]]
-            dset[files_chunk*j:files_chunk*(j+1)] = matriu_Fx(param, inputs)
-            
 def out_of_core_approx(param, var, Iapps, tuples, files_chunk, n_chunks, wavelons):
-    factor, cpu_compensator = compactador(param, n_chunks, files_chunk, wavelons)
-    #factor = n_chunks_anteriors/arxiu
+    factor = compactador(param, n_chunks, files_chunk, wavelons)
+    #factor = n_chunks_anteriors/n_chunks_para_la_escritura_de_la_matrix
     nf = files_chunk*factor #aumento files_chunk per guardar chunks més grans
-    n_chunks //= factor # 1 dataset/arxiu || 1 chunk = 1 arxiu
+    n_chunks //= factor # 1 dataset/chunk || 
     
     if not param['recovery']:
-        with ProcessPoolExecutor(mp.cpu_count()-cpu_compensator) as ex:
-            futures = [ex.submit(write_file, i, nf, factor, files_chunk, wavelons, param, Iapps, tuples) for i in range(n_chunks)]
-            [_ for _ in tqdm(as_completed(futures), total=len(futures), desc='Guardant matriu creada', unit='arxiu', leave=True)]
+        ## SE GENERA LA MATRIX EN ARCHIVOS .ZARR ##
+        compressor = Blosc(cname=param['cname'], clevel=param['clevel'])#, shuffle=Blosc.SHUFFLE)
+        synchronizer = zarr.ProcessSynchronizer('temp.sync')
+        f = zarr.DirectoryStore(param['matrix_folder']+'/matriu.zarr')
+        z = zarr.create(store = f, shape=(Iapps.shape[0], wavelons),
+                        overwrite = True, compressor = compressor,
+                        synchronizer = synchronizer, dtype = param['dtype'])
+        for j in tqdm(range(n_chunks), desc='Saving matrix', unit='chunk', leave=True):
+            inputs = [input_[0][nf*j:nf*(j+1)] for input_ in tuples]+[Iapps[nf*j:nf*(j+1)]]
+            z[nf*j:nf*(j+1)] = matriu_Fx(param, inputs)
     
     ############# DISTRIBUTED CLIENT CONFIGURATION #############
-    #Cluster local || Per monitorar el scheduler: http://localhost:8787
-    client = Client(processes=False,
-                silence_logs='error',
-                local_dir=param['client_temp_data'],
-                n_workers=1,
-                threads_per_worker=1,
-                dashboard_address='localhost:8787')
-    """Silence_logs pq no apareguin warnings: perque algun worker deixa de
-rebre instruccions per no saturarse"""
+    
+    worker_kwargs = {'processes': param['processes'],
+                     'n_workers': param['n_workers'], #ha de ser un num. parell
+                     'threads_per_worker': param['threads_per_worker'],
+                     'silence_logs': 40, #para no mostrar info de warnings
+                     'memory_limit': param['memory_limit'], #per worker
+                     'memory_target_fraction': 0.95,
+                     'memory_spill_fraction': 0.99,
+                     'memory_pause_fraction': False,
+                     'local_dir': param['client_temp_data']
+                     }
+
+    # do not kill worker at 95% memory level - es reinicia.
+    dask.config.set({"distributed.worker.memory.terminate": False})
+
+    # setup Dask distributed client
+    cluster = LocalCluster(**worker_kwargs)
+    client = Client(cluster)
     print(client)    
     
-    arxius_oberts=[]
-    with performance_report(): #genera dask-report.html
-        datasets = []
-        try:
-            for i in tqdm(range(n_chunks), desc='Llegint matriu creada', leave=False):
-                f = h5py.File(param['matrix_folder']+'/matriu'+'0'*(4-len(str(i)))+str(i)+'.hdf5', 'r')
-                arxius_oberts.append(f)
-                datasets.append(da.from_array(f.get('dset'), chunks=(files_chunk, wavelons)))
-                # cada dataset = nuevo_chunk corresponde al tamaño de todo un archivo, y se subdivide en chunk del tamaño acorde a las fitas definidas. No se pude generar un archivo con el tamaño del chunk igual al del archivo, por la variable factor > 1, si no la simulación se para (por culpa del exit() del final de la funcion compactador())
-            FX = da.concatenate(datasets, axis=0)
-            print('Guardant matriu de covariancia FTF')
-            if not param['recovery_FTF']:
-                FTF = dd.from_dask_array(da.dot(FX.T, FX), columns = [str(elem) for elem in np.arange(wavelons)])
-                FTF = FTF.persist() #permite cargar tareas en segundo plano, para cálculos pesado mejora el rendimiento.
-                progress(FTF) #para ver la barra de progreso en distributed
-                FTF.to_parquet(param['matrices_folder']+'/FTF.parquet')
-            for i in range(param['recovery_var'],len(tuples)):
-                client.restart() #para borrar tareas que se hayas quedado en caché.
-                print('\n'+'--- Aproximando', var[i], '---')
-                target = tuples[i][1].reshape(len(tuples[i][1]), 1)
-                out_of_core_training(param, FX, target, files_chunk, var[i])
-            
-        finally:
-            #el finally tanca tots els arxius oberts encara que apareguin errors.
-            [arxiu.close() for arxiu in arxius_oberts]
-    print('')
+    ## Cálculos con dask.distributed
+    f = zarr.open(param['matrix_folder']+'/matriu.zarr', 'r')
+    FX = da.from_array(f, chunks=(files_chunk, wavelons))
+    print('Saving covariance matrix FTF')
+    if not param['recovery_FTF']:
+        FTF = dd.from_dask_array(da.dot(FX.T, FX), columns = [str(elem) for elem in np.arange(wavelons)])
+        FTF = FTF.persist() #carga tareas en segundo plano, cálculos pesado mejora el rendimiento.
+        progress(FTF) #para ver la barra de progreso en distributed
+        FTF.to_parquet(param['matrices_folder']+'/FTF.parquet')
+    for i in range(param['recovery_var'],len(tuples)):
+        client.restart() #para borrar tareas que se hayas quedado en caché.
+        print('\n'+'--- Aproximando', var[i], '---')
+        target = tuples[i][1].reshape(len(tuples[i][1]), 1)
+        out_of_core_training(param, FX, target, files_chunk, var[i])
+    print('\n')
                                 
 ### LOSS
 def out_of_core_training(param, FX, target, files_chunk, var):
@@ -197,7 +162,6 @@ def out_of_core_training(param, FX, target, files_chunk, var):
     A = FTF + np.identity(FTF.shape[1])*param['regularizer']*vaps[-1].real
     
     Y = da.from_array(target, chunks = (files_chunk, 1))
-    #dd.from_dask_array(da.dot(FX.T, Y), columns = ['0']).to_parquet('FTY.parquet')
     FTY = dd.from_dask_array(da.dot(FX.T, Y), columns = ['0'])
     FTY = FTY.persist()
     progress(FTY)
@@ -205,7 +169,6 @@ def out_of_core_training(param, FX, target, files_chunk, var):
     b = np.array(pd.read_parquet(param['matrices_folder']+'/FTY.parquet'))
 
     weights = lstsq(A, b, rcond=None)[0] #vector columna
-    #weights = lstsq_(A, b, cond=None)[0] #vector columna amb scipy
     weights = da.from_array(weights, chunks = (files_chunk, 1))
     save_data(param['results_folder']+'/weights_' + var + '.parquet', weights)
     
@@ -269,26 +232,23 @@ def normalize(param, train_data, Iapp): #train_data = (w_train, y_train, ...)
 ####################################### WN PARAMETRIZATION #######################################
 
 ## Selecciona el algoritmo (in memory o out-of-core)
-def select_algorithm(param, wavelons, marker = 0):
-    memoria = param['points']*param['n_Iapp']*wavelons*param[param['dtype']]/(2**30)
-    #si no se usara hyperlearn el factor_ser tendria que ser 2.6 - 2.9
-    if memoria <= psutil.virtual_memory().free/(1024**3):
-        mode  = 'IN MEMORY MODE'
-        n_chunks, files_chunk, mode = in_memory_postconfig(param, wavelons, mode)
-    elif (memoria <= psutil.disk_usage('/')[2]/(1024**3)*ratio_comp[param['resolution']]/1.1) or param['recovery']:
+def set_algorithm(param, wavelons, marker = 0):
+    memoria = param['points']*param['n_Iapp']*wavelons*param[param['dtype']]/(2**30) 
+    #SIEMPRE SE TRABAJARÁ CON FLOAT64 pero la opción float32 está sobretodo para cálculos out-of-core y reducir espacio de disco.
+    if (memoria <= psutil.disk_usage('/')[2]/(1024**3)*ratio_comp[param['resolution']]/1.1) or param['recovery']:
     # se supone que si recovery = True ya hay una carpeta FX donde importar la matriz.
     #1.1 para dar un margen del 10% de espacio al disco para el directorio temporal de distributed
-        mode  = 'OUT-OF-CORE MODE'
-        n_chunks, files_chunk, mode = parametrization(param, wavelons, marker, mode)
+        n_chunks, files_chunk = parametrization(param, wavelons, marker)
     else:
         print('\n','- ERROR - No hay suficiente memoria para la configuración de la Wavenet.')
         print('Available disk space:', round(psutil.disk_usage('/')[2]/(2**30), 2), 'GB', 'Required disk space:', round(memoria/ratio_comp[param['resolution']]*1.1, 2), 'GB')
         exit()
-    return n_chunks, files_chunk, mode
+    return n_chunks, files_chunk
 
 # troba el núm files_chunk més gran (el mín n_chunks) entre les fites donades.
 def chunk_size(param, wavelons, marker):
     matrix_MB = param['points']*param['n_Iapp']*wavelons*param[param['dtype']]/(2**20)
+    # aquí se parametriz a la matriz para trabajar con los datos ya guardados, por lo tanto, estarán en el formato f4 o f8 escogido, por eso hay que poner param[param['dtype']]
     n_chunks_max = int(matrix_MB/param['fita_chunk_inf']+1) #+1 pq al hacer int redondee arriba
     # n_chunks_max corresponde a al n_chunks maxim, de min n_filas
     interruptor = 0
@@ -310,56 +270,38 @@ def chunk_size(param, wavelons, marker):
             new_punts = input('Enter new n_points value: ')
             param['points'] = int(new_punts)
             return chunk_size(param, wavelons, marker)
-    
-def in_memory_postconfig(param, wavelons, mode):
-    print('')
-    print(display_configuration(param, wavelons, 1, mode))
-    print('Change n_Iapps [i], nº of points [p]?')
-    answer = input("(i/p): ")
-    if answer == 'i':
-        new_Iapps = input('Enter new n_Iapp value: ')
-        param['n_Iapp'] = int(new_Iapps) #sobrescribo param
-        print('\n'*100)
-        return select_algorithm(param, wavelons)
-    #como marker tiene un valor default y aqui no se usa no hace falta importarlo a la funcion
-    elif answer == 'p':
-        new_punts = input('Enter new n_points value: ')
-        param['points'] = int(new_punts)
-        print('\n'*100)
-        return select_algorithm(param, wavelons)
-    return 1, param['n_Iapp']*param['points'], mode
-    
-def parametrization(param, wavelons, marker, mode):
+        
+def parametrization(param, wavelons, marker):
     #marker es un marcador para saber de qué cambio vienes, si de cambiar las Iapps o el n_puntos.
     n_chunks = chunk_size(param, wavelons, marker)
     #els chunks sense compactar tenen tantes files com files_chunk
     print('') # fake salt de linia perque només es mostri la config. que estic modificant 
-    print(display_configuration(param, wavelons, n_chunks, mode))
+    print(display_configuration(param, wavelons, n_chunks))
     print('Change n_Iapps [i], nº of points [p], fita_chunk_inf [inf] or fita_chunk_sup [sup]?')
     answer = input("(i/p/inf/sup): ")
     if answer == 'i':
         new_Iapps = input('Enter new n_Iapp value: ')
         param['n_Iapp'] = int(new_Iapps) #sobrescribo param
         print('\n'*100)
-        return select_algorithm(param, wavelons, 0)
+        return set_algorithm(param, wavelons, 0)
     elif answer == 'p':
         #si tienes que arreglar problemas de configuración sólo tocar: n_Iapps o n_puntos
         new_punts = input('Enter new n_points value: ')
         param['points'] = int(new_punts)
         print('\n'*100)
-        return select_algorithm(param, wavelons, 1)
+        return set_algorithm(param, wavelons, 1)
     elif answer == 'inf':
         new_fita_inf = input('Enter new fita_inf value [MB]: ')
         param['fita_chunk_inf'] = int(new_fita_inf)
         print('\n'*100)
-        return select_algorithm(param, wavelons, marker)
+        return set_algorithm(param, wavelons, marker)
     elif answer == 'sup':
         new_fita_sup = input('Enter new fita_sup value [MB]: ')
         param['fita_chunk_sup'] = int(new_fita_sup)
         print('\n'*100)
-        return select_algorithm(param, wavelons, marker)
+        return set_algorithm(param, wavelons, marker)
     print('')
-    return n_chunks, param['n_Iapp']*param['points']//n_chunks, mode
+    return n_chunks, param['n_Iapp']*param['points']//n_chunks
 
 # Descomposicio factorial del número de wavelons i parametritzar la matriu en valors multiples
 def descomp_factorial(num):
@@ -394,19 +336,14 @@ def divisors(l):
     return div
 
 def compactador(param, n_chunks, files_chunk, wavelons):
-    div = divisors(descomp_factorial(n_chunks))
-    div.reverse() #comença pels divisors més grans
-    cpu_compensator = 0 #si hace falta reducir el numero de CPUs en parallelo para reducir la RAM utilizada sin sacrificar el computo en parallelo, esta variable lo corrige
-    while cpu_compensator < mp.cpu_count(): #hasta agotar el núemro de CPUs disponibles
-        for elem in div:
-            if n_chunks/elem < 950: #n_chunks = n_arxius i linux soporta fins 1024 arxius simultanis.
-                if files_chunk*elem*wavelons*param[param['dtype']]/(2**30) <= psutil.virtual_memory().free/(2**30)/(mp.cpu_count()-cpu_compensator)/param['sec_factor']: #max dask chunk [GB]
-                    print('Compressing', n_chunks//elem, 'files at', round(files_chunk*elem*wavelons*param[param['dtype']]/(2**30), 2), 'GB/file')
-                    print('Minus', cpu_compensator, 'CPU/s \n')
-                    return elem, cpu_compensator
-        cpu_compensator += 1
-    print('- ERROR - La configuración actual no permite reducir el número de archivos para que Linux pueda gestionarlos todos a la vez.')
-    exit()
+    div = [1]+divisors(descomp_factorial(n_chunks)) #comença pels divisors més petit
+    # le añado la unidad como divisor, por si no hay otros
+    for i, elem in enumerate(div):
+        if files_chunk*elem*wavelons*8/(2**30) >= psutil.virtual_memory().free/(2**30):
+            # se generan datos en float64 por eso el 8 (bytes)
+            if i == 0: print('- ERROR - Chunks demasiado grandes'); exit()
+            return div[i-1] #per quedar-me amb l'element anterior al if
+    return elem #retorno el més gran perquè el chunk/elem em cap a la RAM
 
 ###################################### FUNCIONES PRINCIPALES ######################################
 
@@ -422,8 +359,7 @@ def dic(dic):
 def approximation(param, euler_dict, euler, var, **CI_approx):
     ## Auto configuració parametritzada
     wavelons = hidden_layer(param, len(var)) #calcula el nº de wavelons
-    # si es in memory sólo habrá 1 chunk = la matriz entera
-    n_chunks, files_chunk, mode = select_algorithm(param, wavelons)
+    n_chunks, files_chunk = set_algorithm(param, wavelons)
     
     seeds = [5061996, 5152017]
     if param['generateIapp']:
@@ -438,10 +374,7 @@ def approximation(param, euler_dict, euler, var, **CI_approx):
     #inputs = input_1, input_2, ..., Iapps
     inputs = normalize(param, train_data, Iapps) # inputs[-1] = normalized Iapps
     tuples = [(input_, target[i]) for i,input_ in enumerate(inputs[:-1])]
-    if mode == 'IN MEMORY MODE':
-        in_memory_approx(param, var, inputs[-1], tuples)
-    if mode == 'OUT-OF-CORE MODE':
-        out_of_core_approx(param, var, inputs[-1], tuples, files_chunk, n_chunks, wavelons)
+    out_of_core_approx(param, var, inputs[-1], tuples, files_chunk, n_chunks, wavelons)
     
 def prediction(param, euler_dict, euler, var, titulo, **CI_simu):
     np.random.seed(80085)
@@ -468,14 +401,14 @@ def prediction(param, euler_dict, euler, var, titulo, **CI_simu):
     #si solo se quieren ver los graficos, los outputs ya deberían estar guardados y solo necesitas generar los targets con la funcion euler()
     
     ## Gràfics
-    #visualize(param, titulo, var, Iapps, target)
+    visualize(param, titulo, var, Iapps, target)
 
 ############################################ GRAPHICS ############################################
 
 ### Taula de la terminal
 from terminaltables import SingleTable
 
-def display_configuration(param, wavelons, n_chunks, mode):
+def display_configuration(param, wavelons, n_chunks):
     nbytes = param['points']*param['n_Iapp']*wavelons*param[param['dtype']] #nbytes matrix
     config = [['n_chunks', n_chunks,
                'rows_chunk', param['n_Iapp']*param['points']//n_chunks],
@@ -486,7 +419,7 @@ def display_configuration(param, wavelons, n_chunks, mode):
               ['Memoria F(x)', str(round(nbytes/(2**30), 2)) + ' GB',
                'Memoria/chunk', str(round(nbytes/n_chunks/(2**20),2)) + ' MB']]
     
-    taula = SingleTable(config, ' WAVENET WITH '+ str(wavelons) +' WAVELONS '+'--> '+ mode +' ')
+    taula = SingleTable(config, ' WAVENET WITH '+ str(wavelons) +' WAVELONS '+'--> OUT-OF-CORE ')
     taula.inner_row_border = True
     taula.justify_columns = {0: 'center', 1: 'center', 2: 'center', 3: 'center'}
     return taula.table

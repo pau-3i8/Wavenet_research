@@ -106,7 +106,7 @@ def matriu_2D(object param, double[::1] input_1 not None, double[::1] input_2 no
     cdef size_t N = input_1.shape[0], i = 0, j, n1, n2, n3
     cdef long int c1, c2, c3, m
     
-    cdef double[:,::1] matriu = np.zeros((wavelons, N), dtype = param['dtype'])
+    cdef double[:,::1] matriu = np.zeros((wavelons, N), dtype = np.double)
     
     ## Creas las columnas de la parte lineal
     if param['bool_lineal']:
@@ -120,7 +120,7 @@ def matriu_2D(object param, double[::1] input_1 not None, double[::1] input_2 no
             for n2 in range(n_sf):
                 for n3 in range(n_sf):
                     for j in range(N):
-                        matriu[i][j] = phi(sf_name, input_1[j], n1, n_sf)* phi(sf_name, input_2[j], n2, n_sf)*phi(sf_name, Iapp[j], n3, n_sf)
+                        matriu[i, j] = phi(sf_name, input_1[j], n1, n_sf)* phi(sf_name, input_2[j], n2, n_sf)*phi(sf_name, Iapp[j], n3, n_sf)
                     i+=1
 
     ## Creas las columnas de wavelets
@@ -129,38 +129,38 @@ def matriu_2D(object param, double[::1] input_1 not None, double[::1] input_2 no
         for n1 in range(n_sf):
             for n2 in range(n_sf):
                 for n3 in range(n_sf):
-                    for c1 in range(2**m):
+                    for c1 in range(2**m): #K3
                         for j in range(N):
-                            matriu[i][j] = phi(sf_name, input_1[j], n1, n_sf)* phi(sf_name, input_2[j], n2, n_sf)* psi(sf_name, (2**m)* Iapp[j] - c1, n3, n_sf)
+                            matriu[i, j] = phi(sf_name, input_1[j], n1, n_sf)* phi(sf_name, input_2[j], n2, n_sf)* psi(sf_name, (2**m)* Iapp[j] - c1, n3, n_sf)
                         i+=1
                     for c1 in range(2**m):
                         for j in range(N):
-                            matriu[i][j] = phi(sf_name, Iapp[j], n1, n_sf)* phi(sf_name, input_1[j], n2, n_sf)* psi(sf_name, (2**m)* input_2[j] - c1, n3, n_sf)
+                            matriu[i, j] = phi(sf_name, Iapp[j], n1, n_sf)* phi(sf_name, input_1[j], n2, n_sf)* psi(sf_name, (2**m)* input_2[j] - c1, n3, n_sf)
                         i+=1
                     for c1 in range(2**m):
                         for j in range(N):
-                            matriu[i][j] = phi(sf_name, input_2[j], n1, n_sf)* phi(sf_name, Iapp[j], n2, n_sf)* psi(sf_name, (2**m)* input_1[j] - c1, n3, n_sf)
+                            matriu[i, j] = phi(sf_name, input_2[j], n1, n_sf)* phi(sf_name, Iapp[j], n2, n_sf)* psi(sf_name, (2**m)* input_1[j] - c1, n3, n_sf)
                         i+=1
-                    for c1 in range(2**m):
+                    for c1 in range(2**m): #K2
                         for c2 in range(2**m):
                             for j in range(N):
-                                matriu[i][j] = phi(sf_name, input_1[j], n1, n_sf)* psi(sf_name, (2**m)* input_2[j] - c1, n2, n_sf)* psi(sf_name, (2**m)* Iapp[j] - c2, n3, n_sf)
+                                matriu[i, j] = phi(sf_name, input_1[j], n1, n_sf)* psi(sf_name, (2**m)* input_2[j] - c1, n2, n_sf)* psi(sf_name, (2**m)* Iapp[j] - c2, n3, n_sf)
                             i+=1
                     for c1 in range(2**m):
                         for c2 in range(2**m):
                             for j in range(N):
-                                matriu[i][j] = phi(sf_name, Iapp[j], n1, n_sf)* psi(sf_name, (2**m)* input_1[j] - c1, n2, n_sf)* psi(sf_name, (2**m)* input_2[j] - c2, n3, n_sf)
+                                matriu[i, j] = phi(sf_name, Iapp[j], n1, n_sf)* psi(sf_name, (2**m)* input_1[j] - c1, n2, n_sf)* psi(sf_name, (2**m)* input_2[j] - c2, n3, n_sf)
                             i+=1
                     for c1 in range(2**m):
                         for c2 in range(2**m):
                             for j in range(N):
-                                matriu[i][j] = phi(sf_name, input_2[j], n1, n_sf)* psi(sf_name, (2**m)* Iapp[j] - c1, n2, n_sf)* psi(sf_name, (2**m)* input_1[j] - c2, n3, n_sf)
+                                matriu[i, j] = phi(sf_name, input_2[j], n1, n_sf)* psi(sf_name, (2**m)* Iapp[j] - c1, n2, n_sf)* psi(sf_name, (2**m)* input_1[j] - c2, n3, n_sf)
                             i+=1
-                    for c1 in range(2**m):
+                    for c1 in range(2**m): #K1
                         for c2 in range(2**m):
                             for c3 in range(2**m):
                                 for j in range(N):
-                                    matriu[i][j] = psi(sf_name, (2**m)* input_1[j] - c1, n1, n_sf)* psi(sf_name, (2**m)* input_2[j] - c2, n2, n_sf)* psi(sf_name, (2**m)* Iapp[j] - c3, n3, n_sf)
+                                    matriu[i, j] = psi(sf_name, (2**m)* input_1[j] - c1, n1, n_sf)* psi(sf_name, (2**m)* input_2[j] - c2, n2, n_sf)* psi(sf_name, (2**m)* Iapp[j] - c3, n3, n_sf)
                                 i+=1
     return np.asarray(matriu).T
 
@@ -176,6 +176,7 @@ def matriu_3D(object param, double[::1] input_1 not None, double[::1] input_2 no
     cdef long int c1, c2, c3, c4, m
     
     cdef double[:,::1] matriu = np.zeros((wavelons, N), dtype = np.double)
+    # si defines un array con double[] o float[] ya defines el dtype
     
     if param['bool_lineal']:
         i = 3
@@ -200,7 +201,7 @@ def matriu_3D(object param, double[::1] input_1 not None, double[::1] input_2 no
             for n2 in range(n_sf):
                 for n3 in range(n_sf):
                     for n4 in range(n_sf):
-                        for c1 in range(2**m):
+                        for c1 in range(2**m): #K4
                             for j in range(N):
                                 matriu[i, j] = phi(sf_name, input_2[j], n1, n_sf)* phi(sf_name, input_1[j], n2, n_sf)* phi(sf_name, input_3[j], n3, n_sf)* psi(sf_name, (2**m)* Iapp[j] - c1, n4, n_sf)
                             i+=1
@@ -216,7 +217,7 @@ def matriu_3D(object param, double[::1] input_1 not None, double[::1] input_2 no
                             for j in range(N):
                                 matriu[i, j] = phi(sf_name, input_1[j], n1, n_sf)* phi(sf_name, input_3[j], n2, n_sf)* phi(sf_name, Iapp[j], n3, n_sf)* psi(sf_name, (2**m)* input_2[j] - c1, n4, n_sf)
                             i+=1
-                        for c1 in range(2**m):
+                        for c1 in range(2**m): #K3
                             for c2 in range(2**m):
                                 for j in range(N):
                                     matriu[i, j] = phi(sf_name, input_2[j], n1, n_sf)* phi(sf_name, input_1[j], n2, n_sf)* psi(sf_name, (2**m)* input_3[j] - c1, n3, n_sf)* psi(sf_name, (2**m)* Iapp[j] - c2, n4, n_sf)
@@ -246,7 +247,7 @@ def matriu_3D(object param, double[::1] input_1 not None, double[::1] input_2 no
                                 for j in range(N):
                                     matriu[i, j] = phi(sf_name, input_1[j], n1, n_sf)* phi(sf_name, Iapp[j], n2, n_sf)* psi(sf_name, (2**m)* input_3[j] - c1, n3, n_sf)* psi(sf_name, (2**m)* input_2[j] - c2, n4, n_sf)
                                 i+=1
-                        for c1 in range(2**m):
+                        for c1 in range(2**m): #K2
                             for c2 in range(2**m):
                                 for c3 in range(2**m):
                                     for j in range(N):
@@ -270,7 +271,7 @@ def matriu_3D(object param, double[::1] input_1 not None, double[::1] input_2 no
                                     for j in range(N):
                                         matriu[i, j] = psi(sf_name, (2**m)* input_1[j] - c1, n1, n_sf)* psi(sf_name, (2**m)* input_3[j] - c2, n2, n_sf)* psi(sf_name, (2**m)* Iapp[j] - c3, n3, n_sf)* phi(sf_name, input_2[j], n4, n_sf)
                                     i+=1
-                        for c1 in range(2**m):
+                        for c1 in range(2**m): #K1
                             for c2 in range(2**m):
                                 for c3 in range(2**m):
                                     for c4 in range(2**m):
