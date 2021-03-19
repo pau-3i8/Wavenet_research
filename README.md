@@ -1,6 +1,6 @@
 # Wavenet_research
 
-La última versión de la Wavenet (V4) combina los dos algoritmos, con Dask y sin Dask. Para poder ejecutarla se hace uso de la carpeta hyperlearn de https://github.com/danielhanchen/hyperlearn. Además hay que compilar el programa escrito en Cython con la comanda: $ python3 setup.py build_ext --inplace
+La última versión de la Wavenet (V6) usa sólo un algoritmo out-of-core. Además hay que compilar el programa escrito en Cython con la comanda: $ python3 setup.py build_ext --inplace
 
 Y ya se puede ejecutar cualquier modelo con la configuración definida en el archivo configuration.py
 
