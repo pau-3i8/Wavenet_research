@@ -19,7 +19,7 @@ Since there are terascale models, out-of-core (ooc) computation has been used to
 
 The repository provides scripts for training and evaluating the Wavenet in any similar neuron model with 2D or 3D ODEs.
 
-The new desidered models should have the same structure as the ones presented in the Morris_Lecar.py, Nagumo_2D.py, Nagumo_3D.py and Wang_3D.py files. A configuration dictionary should be created following the preexisting ones in the configuration.py file.
+The new desidered models should have the same structure as the ones presented in the [Morris_Lecar.py](https://github.com/pau-3i8/Wavenet_research/blob/master/Morris_Lecar.py), [Nagumo_2D.py](https://github.com/pau-3i8/Wavenet_research/blob/master/Nagumo_2D.py), [Nagumo_3D.py](https://github.com/pau-3i8/Wavenet_research/blob/master/Nagumo_3D.py) and [Wang_3D.py](https://github.com/pau-3i8/Wavenet_research/blob/master/Wang_3D.py) files. A configuration dictionary should be created following the preexisting ones in the [configuration.py](https://github.com/pau-3i8/Wavenet_research/blob/master/configuration.py) file.
 ___
 
 ## Installation
@@ -61,7 +61,7 @@ sudo apt-get install libpython3-dev libpython3.8-dev
 
 #### Compiling Cython .pyx code
 
-Go to the directory /Wavenet and execute:
+One downloaded the repository, go to the directory /Wavenet and execute:
 ```
 python3 setup.py build_ext --inplace
 ```
@@ -69,11 +69,11 @@ ___
 
 ## Documentation
 
-The code runs as is. Once compiled the Cython code in the [Wavenet](https://github.com/pau-3i8/Wavenet_research/tree/main/Wavenet) folder, to train and simulate a model it is necessary to execute a desidered model file. To train and simulate the Morris-Lecar model, for example:
+The code runs as is. Once compiled the [Cython code](https://github.com/pau-3i8/Wavenet_research/blob/master/Wavenet/activation_functions.pyx), to train and simulate a model it has to be executed the desidered model file. To train and simulate the Morris-Lecar model, for example:
 ```
 python3 Morris_Lecar.py
 ```
-In the configuration.py file there are all Wavenet and models' parameters to be changed with their description.
+In the [configuration.py](https://github.com/pau-3i8/Wavenet_research/blob/master/configuration.py) file there are all Wavenet and models' parameters to be changed with their description.
 ___
 
 ## Authors
@@ -87,7 +87,7 @@ ___
 - Antoni Guillamon - antoni.guillamon@upc.edu
 
 ```
-@misc{Wavenet research,
+@misc{Wavenet paper,
   title={Empirical modelling and prediction of neuronal dynamics},
   author={Fisco, Pau and
           Aquilu\'{e}, David and
@@ -104,7 +104,7 @@ ___
 - Pau Fisco - pau.fisco@upc.edu
 
 ```
-@misc{Wavenet research,
+@misc{Wavenet code,
   title={Wavenet research.},
   author={Fisco, Pau},
   journal={GitHub. Note: https://github.com/pau-3i8/Wavenet_research},
@@ -114,4 +114,3 @@ ___
 ```
 
 [Back To The Top](#Wavenet_research)
--->
