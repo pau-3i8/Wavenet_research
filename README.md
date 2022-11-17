@@ -17,7 +17,7 @@ The respository is a Wavelet Neural Network (Wavenet) used to predict biological
 
 Since there are terascale models, out-of-core (ooc) computation has been used to compute the ordinary least squares for the models' training, using [Dask distributed](https://github.com/dask/distributed) in a single machine.
 
-The repository provides scripts for training and evaluating the Wavenet in any similar neuron model with 2D or 3D ODEs.
+The repository provides scripts for training and evaluating the Wavenet with any similar neuron model with 2D or 3D ODEs.
 
 The new desidered models should have the same structure as the ones presented in the [Morris_Lecar.py](https://github.com/pau-3i8/Wavenet_research/blob/master/Morris_Lecar.py), [Nagumo_2D.py](https://github.com/pau-3i8/Wavenet_research/blob/master/Nagumo_2D.py), [Nagumo_3D.py](https://github.com/pau-3i8/Wavenet_research/blob/master/Nagumo_3D.py) and [Wang_3D.py](https://github.com/pau-3i8/Wavenet_research/blob/master/Wang_3D.py) files. A configuration dictionary should be created following the preexisting ones in the [configuration.py](https://github.com/pau-3i8/Wavenet_research/blob/master/configuration.py) file.
 ___
