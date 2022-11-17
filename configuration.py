@@ -57,7 +57,7 @@ n_Iapp : int
 I_max & I_min : float
     Boundary domain for Iapps in training.
 resolution : int
-    Level of resolution of the wavenet basis (0, 1, 2...).
+    Level of resolution of the wavenet basis (-1, 0, 1, 2...).
 n_sf : int
     Number of superposed functions (1, 2, 3, 4...).
 fscale : str
