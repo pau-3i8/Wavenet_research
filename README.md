@@ -61,7 +61,7 @@ sudo apt-get install libpython3-dev libpython3.8-dev
 
 #### Compiling Cython .pyx code
 
-Once downloaded the repository, go to the directory /Wavenet and execute:
+Once downloaded the repository, go to the subdirectory /Wavenet and execute:
 ```
 python3 setup.py build_ext --inplace
 ```
