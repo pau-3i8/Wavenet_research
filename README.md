@@ -87,15 +87,15 @@ ___
 - Antoni Guillamon - antoni.guillamon@upc.edu
 
 ```
-@misc{Wavenet paper,
+@unpublished{Wavenet_2023,
   title={Empirical modelling and prediction of neuronal dynamics},
   author={Fisco, Pau and
           Aquilu\'{e}, David and
           Roqueiro, N\'estor and
           Fossas, Enric and
           Guillamon, Antoni},
-  journal={},
-  year={2022}
+  year={2023},
+  month={January}
 }
 ```
 
@@ -104,12 +104,13 @@ ___
 - Pau Fisco - pau.fisco@upc.edu
 
 ```
-@misc{Wavenet code,
-  title={Wavenet research.},
-  author={Fisco, Pau},
-  journal={GitHub. Note: https://github.com/pau-3i8/Wavenet_research},
-  volume={1},
-  year={2022}
+@misc{Wavenet_code,
+  title = {Wavenet research},
+  author = {Fisco, Pau},
+  howpublished = {GitHub},
+  note = {https://github.com/pau-3i8/Wavenet\_research},
+  volume = {1},
+  year = {2022}
 }
 ```
 
