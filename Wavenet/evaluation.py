@@ -1,7 +1,7 @@
 from dask import dataframe as dd, array as da
 import pandas as pd, numpy as np, warnings
 from .files import import_data, save_data
-from .wavenet import matrix_Fx, normalize
+from .wavenet import matrix_G, normalize
 from .plotting import plotting
 from numba import njit
 from tqdm import tqdm
@@ -59,9 +59,9 @@ def prediction(param, var, Iapps, tuples):
 
     for j,I in enumerate(tqdm(Iapps, desc='Prediction', unit=' integrations', leave=True)):
         normalized = normalize(param, (d_var['i_'+str(i)] for i in range(len(tuples))), np.array([I]))
-        Fx = matrix_Fx(param, normalized)
+        G = matrix_G(param, normalized)
         for i in range(len(tuples)):
-            d_var['i_'+str(i)] = (Fx.dot(d_var['weights_'+str(i)]))[0] #n+1
+            d_var['i_'+str(i)] = (G.dot(d_var['weights_'+str(i)]))[0] #n+1
             d_var['predicted_'+str(i)][j] = d_var['i_'+str(i)]
           
     warnings.simplefilter('ignore') #ignore numeric errors, later seen in the metrics

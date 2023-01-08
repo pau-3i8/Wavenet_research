@@ -1,7 +1,7 @@
 from .activation_functions import matrix_3D, matrix_2D
 import pandas as pd, numpy as np, psutil, os
 
-def matrix_Fx(param, inputs):
+def matrix_G(param, inputs):
     if len(inputs) == 3:
         input_1, input_2, Iapp = inputs
         return matrix_2D(param, input_1, input_2, Iapp, hidden_layer(param, 2))

@@ -4,13 +4,13 @@ from dask.distributed import Client, LocalCluster
 from dask import dataframe as dd, array as da
 from dask.distributed import progress
 from itertools import combinations
-from numpy.linalg import lstsq
+from numpy.linalg import solve
 from scipy.linalg import eigh
 from numcodecs import Blosc
 from tqdm import tqdm
 
 from .files import read_data, save_data
-from .wavenet import matrix_Fx
+from .wavenet import matrix_G
 import multiprocessing.popen_spawn_posix #in windows: import multiprocessing.popen_spawn_win32
 
 def factorial_decomposition(num):
@@ -78,52 +78,51 @@ def client_distributed(param):
     cluster = LocalCluster(**worker_kwargs)
     return Client(cluster)
 
+np.set_printoptions(precision=16)
+
 def parallel_writes(z, j, nf, param, Iapps, tuples):
     inputs = [input_[0][nf*j:nf*(j+1)] for input_ in tuples]+[Iapps[nf*j:nf*(j+1)]]
-    z[nf*j:nf*(j+1)] = matrix_Fx(param, inputs)
+    z[nf*j:nf*(j+1)] = matrix_G(param, inputs)
     return j #the return only tracks the processes
     
 def ooc_training(param, var, Iapps, tuples, rows_chunk, n_chunks, neurons):
-    
     factor, cpu_compensator = cpu_handling(param, n_chunks, rows_chunk, neurons)
     nf = rows_chunk*factor
     n_chunks //= factor # 1 dataset/chunk
     
     if not param['recovery']:
-        ## THE .zarr MATRIX IS CONSTRUCTED ##
+        ## The .zarr matrix is created here ##
         compressor = Blosc(cname=param['cname'], clevel=param['clevel'])#, shuffle=Blosc.SHUFFLE)
-        #synchronizer = zarr.ProcessSynchronizer('temp.sync')
-        synchronizer = zarr.sync.ThreadSynchronizer()
-        f = zarr.DirectoryStore(param['matrix_folder']+'/matriu.zarr')
+        synchronizer = zarr.ProcessSynchronizer('temp.sync')
+        f = zarr.DirectoryStore(param['matrix_folder']+'/data.zarr')
         z = zarr.create(store = f, shape=(Iapps.shape[0], neurons),
                         overwrite = True, compressor = compressor,
                         synchronizer = synchronizer, dtype = param['dtype'])
         cont = 0
-        with ProcessPoolExecutor(mp.cpu_count()-cpu_compensator) as ex:
+        with ProcessPoolExecutor((mp.cpu_count()-cpu_compensator)) as ex:
             futures = [ex.submit(parallel_writes, z, j, nf, param, Iapps, tuples) for j in range(n_chunks)]
             for job in tqdm(as_completed(futures), total=len(futures),
-                            desc='Saving matrix', unit='chunk', leave=True):
+                            desc='Saving matrix G', unit='chunk', leave=True):
                 cont += job.result()
                 
         if cont != np.sum([i for i in range(n_chunks)]): exit()
     
-    
-    client = client_distributed(param)    
-    f = zarr.open(param['matrix_folder']+'/matriu.zarr', 'r')
-    FX = da.from_array(f, chunks=(rows_chunk, neurons))
-    if not param['recovery_FTF']:
-        print('--- Saving matrix FTF ---')
-        FTF = dd.from_dask_array(da.dot(FX.T, FX), columns = [str(elem) for elem in np.arange(neurons)])
-        FTF = FTF.persist()
-        progress(FTF) #progress bar
-        FTF.to_parquet(param['matrices_folder']+'/FTF.parquet')
+    client = client_distributed(param)
+    f = zarr.open(param['matrix_folder']+'/data.zarr', 'r')
+    G = da.from_array(f, chunks=(rows_chunk, neurons))
+    if not param['recovery_GTG']:
+        print('--- Saving matrix GTG ---')
+        GTG = dd.from_dask_array(da.dot(G.T, G), columns = [str(elem) for elem in np.arange(neurons)])
+        GTG = GTG.persist()
+        progress(GTG) #progress bar
+        GTG.to_parquet(param['matrices_folder']+'/GTG.parquet')
         
-    FTF = np.array(pd.read_parquet(param['matrices_folder']+'/FTF.parquet'))
-    vaps = eigh(FTF, eigvals_only=True)
-    FTF = FTF + np.identity(FTF.shape[1])*param['regularizer_multiplier']*vaps[-1].real
+    GTG = np.array(pd.read_parquet(param['matrices_folder']+'/GTG.parquet'))
+    eigenvalues = eigh(GTG, eigvals_only=True)
+    GTG = GTG + np.identity(GTG.shape[1])*param['regularizer_multiplier']*eigenvalues[-1].real
     
-    print('\n Eigh_max =', vaps[-1])
-    print('Regularizer parameter:', param['regularizer_multiplier']*vaps[-1].real, '\n')    
+    print('\n Eigval_max =', eigenvalues[-1])
+    print('Regularizer parameter:', param['regularizer_multiplier']*eigenvalues[-1].real, '\n')
     
     client.close() #close the client
     client.shutdown() #close the scheduler
@@ -133,28 +132,27 @@ def ooc_training(param, var, Iapps, tuples, rows_chunk, n_chunks, neurons):
         client = client_distributed(param)
         print('\n'+'--- Training', var[i], '---')
         target = tuples[i][1].reshape(len(tuples[i][1]), 1)
-        ooc_loss(param, FX, FTF, target, rows_chunk, var[i])
+        ooc_loss(param, G, GTG, target, rows_chunk, var[i])
         client.close()
         client.shutdown()
     print('\n')
 
-def ooc_loss(param, FX, FTF, target, rows_chunk, var):
+def ooc_loss(param, G, GTG, target, rows_chunk, var):
     
     Y = da.from_array(target, chunks = (rows_chunk, 1))    
-    FTY = dd.from_dask_array(da.dot(FX.T, Y), columns = ['0'])
-    FTY = FTY.persist()
-    progress(FTY)
-    FTY.to_parquet(param['matrices_folder']+'/FTY.parquet')
-    b = np.array(pd.read_parquet(param['matrices_folder']+'/FTY.parquet'))
+    GTY = dd.from_dask_array(da.dot(G.T, Y), columns = ['0'])
+    GTY = GTY.persist()
+    progress(GTY)
+    GTY.to_parquet(param['matrices_folder']+'/GTY.parquet')
+    b = np.array(pd.read_parquet(param['matrices_folder']+'/GTY.parquet'))
     
-    _, s, _ = np.linalg.svd(FTF)
-    weights, _, rank, _ = lstsq(FTF, b, rcond=s.min()/s.max()*(1-np.finfo('float64').eps))
+    weights = solve(GTG, b)
     weights = da.from_array(weights, chunks = (rows_chunk, 1))    
     save_data(param['results_folder']+'/weights_' + var + '.parquet', weights)
     
-    #print('->', var, 'MSE at level =', param['resolution']+2, 'is:', ooc_mse(FX,target,weights))
+    #print('->', var, 'MSE at level =', param['resolution']+2, 'is:', ooc_mse(G,target,weights))
 
-def ooc_mse(FX, target, weights):
-    save_data(param['matrix_folder']+'/temp.parquet', da.dot(FX, weights))   
-    FW = read_data(param['matrices_folder']+'/temp.parquet')
-    return np.sum((target - FW)**2)/len(target)
+def ooc_mse(G, target, weights):
+    save_data(param['matrix_folder']+'/temp.parquet', da.dot(G, weights))   
+    GW = read_data(param['matrices_folder']+'/temp.parquet')
+    return np.sum((target - GW)**2)/len(target)

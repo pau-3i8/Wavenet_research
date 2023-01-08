@@ -11,8 +11,6 @@ to compile: $ python3 setup.py build_ext --inplace
 for optimization checking: $ cython -a activation_functions.pyx
 """
 
-from cython.parallel import parallel, prange
-cimport numpy as np
 import numpy as np
 cimport cython
 
@@ -72,8 +70,8 @@ cdef inline double psi(unicode name, double x, size_t n, size_t n_sf) nogil:
 # Superposition
 @cython.profile(False)
 cdef inline double sup(double x, size_t n, size_t d, size_t n_sf) nogil:
-    if n_sf <= 1: return (x-1/2 + (n+1)/(n_sf+1))*d
     if n_sf > 1: return (x-1/2 + n/(n_sf-1))*d
+    elif n_sf <= 1: return (x-1/2 + (n+1)/(n_sf+1))*d
     
 ########################### 3 input wavenet basis ###########################
 
@@ -86,7 +84,7 @@ def matrix_2D(object param, double[::1] input_1 not None, double[::1] input_2 no
     cdef size_t n_sf = param['n_sf']
     cdef long int res = param['resolution']
     cdef size_t N = input_1.shape[0], i = 0, j, n1, n2, n3
-    cdef long int c1, c2, c3, m
+    cdef long int c1, c2, c3, m #they are uninitialized. Use initializedcheck=True directive
     
     cdef double[:,::1] matrix = np.zeros((wavelons, N), dtype = np.double)
     

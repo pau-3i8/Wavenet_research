@@ -12,7 +12,7 @@ def display_configuration(param, neurons, n_chunks):
                'n_Iapps', param['n_Iapp']],
               ['fita_chunk_inf', param['fita_chunk_inf'],
                'fita_chunk_sup', param['fita_chunk_sup']],
-              ['Memory F(x)', str(round(nbytes/(2**30), 2)) + ' GB',
+              ['Raw memory G(x)', str(round(nbytes/(2**30), 2)) + ' GB',
                'Memory/chunk', str(round(nbytes/n_chunks/(2**20),2)) + ' MB']]
     
     disp = SingleTable(config, ' WAVENET WITH '+ str(neurons) +' NEURONS '+'--> OUT-OF-CORE ')
@@ -73,7 +73,7 @@ def chunk_size(param, neurons, marker):
         n_chunks_max -= 1
     if trigger == 1: return n_chunks_max
     else:
-        print('\n', '- ERROR - No possible configuration.')
+        print('- ERROR - No possible configuration.')
         if marker == 0:
             new_Iapps = input('Enter new n_Iapp value: ')
             param['n_Iapp'] = int(new_Iapps)
