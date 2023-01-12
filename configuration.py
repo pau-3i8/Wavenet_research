@@ -276,7 +276,7 @@ elif param0['generateIapp_eval_stepwise'] == True \
     dict0 = {'noise': 0.01}    
 elif param0['generateIapp_eval_stepwise'] == True \
     and param0['generateIapp_eval_oscillatory'] == True:
-    print('\n', '- ERROR - The evaluation analysis is not properly setup')
+    print('\n', '- ERROR - The evaluation analysis is not properly set up')
 
 ML_jit = {
     # Euler parameters
