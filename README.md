@@ -1,6 +1,6 @@
 # Wavenet_research
 
-Code base for the paper: [Empirical modelling and prediction of neuronal dynamics]()
+Code base for the paper (when available): [Empirical modelling and prediction of neuronal dynamics]()
 ___
 
 ## Table of Contents
