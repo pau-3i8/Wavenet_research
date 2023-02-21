@@ -94,8 +94,7 @@ ___
           Roqueiro, N\'estor and
           Fossas, Enric and
           Guillamon, Antoni},
-  year={2023},
-  month={January}
+  year={2023}
 }
 ```
 
