@@ -80,7 +80,7 @@ ___
 
 #### Paper authors
 
-- Pau Fisco - pau.fisco@upc.edu
+- Pau Fisco-Compte - pau.fisco@upc.edu
 - David Aquilué - daquilue99@gmail.com
 - Néstor Roqueiro - nestor.roqueiro@ufsc.br
 - Enric Fossas - enric.fossas@upc.edu
@@ -89,7 +89,7 @@ ___
 ```
 @unpublished{Wavenet_2023,
   title={Empirical modelling and prediction of neuronal dynamics},
-  author={Fisco, Pau and
+  author={Fisco-Compte, Pau and
           Aquilu\'{e}, David and
           Roqueiro, N\'estor and
           Fossas, Enric and
@@ -105,7 +105,7 @@ ___
 ```
 @misc{Wavenet_code,
   title = {Wavenet research},
-  author = {Fisco, Pau},
+  author = {Fisco-Compte, Pau},
   howpublished = {GitHub},
   note = {https://github.com/pau-3i8/Wavenet\_research},
   volume = {1},
