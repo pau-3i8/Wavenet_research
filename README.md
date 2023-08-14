@@ -100,7 +100,7 @@ ___
 
 #### Code author
 
-- Pau Fisco - pau.fisco@upc.edu
+- Pau Fisco-Compte - pau.fisco@upc.edu
 
 ```
 @misc{Wavenet_code,
